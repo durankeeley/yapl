@@ -22,8 +22,12 @@ import (
 // --- Configuration Structs ---
 
 type VersionInfo struct {
-	URL              string `json:"url"`
-	BinPathInArchive string `json:"bin_path_in_archive,omitempty"`
+	URL                   string   `json:"url,omitempty"`
+	Path                  string   `json:"path,omitempty"`
+	BinPath               string   `json:"bin_path,omitempty"` // For dependencies like umu-launcher
+	WineDllPathComponents []string `json:"wine_dll_path_components,omitempty"`
+	PythonHome            string   `json:"python_home,omitempty"`
+	PythonPath            string   `json:"python_path,omitempty"`
 }
 
 type GlobalConfig struct {
@@ -50,6 +54,7 @@ type AppDependencies struct {
 
 type AppConfig struct {
 	ProtonVersion   string            `json:"proton_version"`
+	ProtonBinName   string            `json:"proton_bin_name,omitempty"`
 	Executable      string            `json:"executable"`
 	UseUMULauncher  bool              `json:"use_umu_launcher,omitempty"`
 	UMUOptions      UMUOptions        `json:"umu_options,omitempty"`
@@ -59,7 +64,6 @@ type AppConfig struct {
 }
 
 // --- App Struct ---
-
 type App struct {
 	Type         string
 	Name         string
@@ -68,7 +72,6 @@ type App struct {
 	AppConfig    AppConfig
 	AppDir       string
 	PrefixPath   string
-	ProtonPath   string
 }
 
 func NewApp(appType, appName string, force bool, gc GlobalConfig, ac AppConfig) *App {
@@ -81,13 +84,11 @@ func NewApp(appType, appName string, force bool, gc GlobalConfig, ac AppConfig) 
 		AppConfig:    ac,
 		AppDir:       appDir,
 		PrefixPath:   filepath.Join(appDir, "prefix"),
-		ProtonPath:   filepath.Join("proton", ac.ProtonVersion),
 	}
 }
 
 func main() {
 	log.SetFlags(0)
-
 	gameName := flag.String("game", "", "The name of the game directory inside ./games/.")
 	appName := flag.String("app", "", "The name of the application directory inside ./apps/.")
 	upgradeProton := flag.Bool("upgrade-proton", false, "Force re-download of the Proton version specified in the config.")
@@ -149,21 +150,17 @@ func main() {
 
 func (a *App) Setup() error {
 	fmt.Printf("🛠️ Setting up '%s'...\n", a.Name)
-
 	if err := a.ensureAllDependencies(); err != nil {
 		return err
 	}
-
 	if err := a.initializePrefix(); err != nil {
 		return err
 	}
-
 	if a.AppConfig.Dependencies.DXVKMode == "custom" {
 		if err := a.installCustomComponents(); err != nil {
 			return err
 		}
 	}
-
 	fmt.Println("\n✅ Setup complete!")
 	fmt.Printf("➡️ If you haven't already, install your application into '%s'\n", mustGetAbsolutePath(a.PrefixPath))
 	return nil
@@ -171,17 +168,14 @@ func (a *App) Setup() error {
 
 func (a *App) Package() error {
 	fmt.Println("📦 Starting packaging process...")
-
 	if _, err := os.Stat(a.AppDir); os.IsNotExist(err) {
 		return fmt.Errorf("application directory '%s' not found", a.AppDir)
 	}
-
 	packageName := filepath.Base(a.AppDir) + ".tar.gz"
 	fmt.Printf("-> Creating bundle '%s'...\n", packageName)
 	if err := createBundle(packageName, a.AppDir); err != nil {
 		return fmt.Errorf("failed to create package: %w", err)
 	}
-
 	fmt.Println("\n✅ Packaging complete!")
 	fmt.Printf("➡️ Distribute '%s' to other machines.\n", packageName)
 	return nil
@@ -189,11 +183,12 @@ func (a *App) Package() error {
 
 func (a *App) Run() error {
 	fmt.Printf("🚀 Launching '%s'...\n", a.Name)
-
 	if err := a.ensureAllDependencies(); err != nil {
 		return err
 	}
-
+	if err := a.initializePrefix(); err != nil {
+		return err
+	}
 	if a.AppConfig.UseUMULauncher {
 		return a.runWithUMU()
 	}
@@ -203,29 +198,79 @@ func (a *App) Run() error {
 // --- Logic Sub-Routines ---
 
 func (a *App) runDirectly() error {
-	fmt.Println("-> Running directly with Proton...")
+	fmt.Println("-> Running directly...")
 
-	protonVersionInfo, ok := a.GlobalConfig.ProtonVersions[a.AppConfig.ProtonVersion]
-	if !ok || protonVersionInfo.URL == "" {
-		return fmt.Errorf("proton version '%s' not defined in runner.json", a.AppConfig.ProtonVersion)
-	}
-
-	protonBin := protonBinPath(a.ProtonPath, protonVersionInfo)
-	wineExecutable := filepath.Join(protonBin, "wine64")
-
+	protonExecutable := a.getProtonExecutablePath()
 	absPrefix := mustGetAbsolutePath(a.PrefixPath)
 	fullExecutablePath := filepath.Join(absPrefix, a.AppConfig.Executable)
 
-	cmd := exec.Command(wineExecutable, fullExecutablePath)
-	cmd.Env = buildCommandEnv(a, absPrefix)
+	var cmd *exec.Cmd
+	binName := a.getProtonBinName()
+	protonVersionInfo := a.getProtonInfo()
+	protonBasePath := a.getProtonPath(protonVersionInfo)
+
+	if binName == "proton" {
+		fmt.Println("-> Using Proton 'run' command.")
+		cmd = exec.Command(protonExecutable, "run", fullExecutablePath)
+		cmd.Env = a.buildProtonEnv(absPrefix, protonBasePath, protonVersionInfo)
+	} else {
+		fmt.Printf("-> Using direct Wine-like execution ('%s').\n", binName)
+		cmd = exec.Command(protonExecutable, fullExecutablePath)
+		cmd.Env = os.Environ()
+		cmd.Env = append(cmd.Env, "WINEPREFIX="+absPrefix)
+		for k, v := range a.AppConfig.EnvironmentVars {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
+		// MODIFIED: Manually add DLL overrides for direct wine calls
+		if overrideStr := a.buildDllOverridesString(); overrideStr != "" {
+			cmd.Env = append(cmd.Env, "WINEDLLOVERRIDES="+overrideStr)
+		}
+	}
+
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	fmt.Printf("-> Executing: %s\n", fullExecutablePath)
+	fmt.Printf("-> Executing: %s\n", strings.Join(cmd.Args, " "))
 	if err := cmd.Run(); err != nil {
 		log.Printf("❌ Application exited with an error: %v", err)
 	}
 	return nil
+}
+
+func (a *App) buildProtonEnv(absPrefix, protonBasePath string, vinfo VersionInfo) []string {
+	steamPath := mustGetAbsolutePath("steam")
+	if err := mustCreateDirectory(steamPath); err != nil {
+		log.Printf("⚠️ Could not create placeholder steam directory: %v", err)
+	}
+	env := os.Environ()
+	env = append(env, "STEAM_COMPAT_DATA_PATH="+absPrefix)
+	env = append(env, "STEAM_COMPAT_CLIENT_INSTALL_PATH="+steamPath)
+
+	for k, v := range a.AppConfig.EnvironmentVars {
+		env = append(env, k+"="+v)
+	}
+
+	// MODIFIED: Add WINEDLLOVERRIDES from the now-functional dll_overrides map
+	if overrideStr := a.buildDllOverridesString(); overrideStr != "" {
+		env = append(env, "WINEDLLOVERRIDES="+overrideStr)
+	}
+
+	if len(vinfo.WineDllPathComponents) > 0 {
+		var dllPaths []string
+		for _, component := range vinfo.WineDllPathComponents {
+			dllPaths = append(dllPaths, filepath.Join(protonBasePath, component))
+		}
+		env = append(env, "WINEDLLPATH="+strings.Join(dllPaths, ":"))
+	}
+	if vinfo.PythonHome != "" {
+		env = append(env, "PYTHONHOME="+vinfo.PythonHome)
+	}
+	if vinfo.PythonPath != "" {
+		env = append(env, "PYTHONPATH="+vinfo.PythonPath)
+	}
+
+	env = append(env, "PROTON_LOG=1")
+	return env
 }
 
 func (a *App) runWithUMU() error {
@@ -237,23 +282,31 @@ func (a *App) runWithUMU() error {
 		if ver == "" {
 			return errors.New("'umu_options.version' must be set when not using system binary")
 		}
-		vinfoMap, ok := a.GlobalConfig.DependencyVersions["umu-launcher"]
-		if !ok {
-			return errors.New("dependency 'umu-launcher' not defined in runner.json")
+		vinfo, err := a.getDependencyInfo("umu-launcher", ver)
+		if err != nil {
+			return err
 		}
-		vinfo, ok := vinfoMap[ver]
-		if !ok || vinfo.URL == "" {
-			return fmt.Errorf("version '%s' for 'umu-launcher' not defined", ver)
-		}
-		umuRunPath = filepath.Join("dependencies", "umu-launcher", ver, vinfo.BinPathInArchive, "umu-run")
+		umuRunPath = filepath.Join("dependencies", "umu-launcher", ver, vinfo.BinPath, "umu-run")
 	}
 
 	absPrefix := mustGetAbsolutePath(a.PrefixPath)
+	protonVersionInfo := a.getProtonInfo()
+	protonBasePath := a.getProtonPath(protonVersionInfo)
+	absProton := mustGetAbsolutePath(protonBasePath)
 	fullExecutablePath := filepath.Join(absPrefix, a.AppConfig.Executable)
 
 	args := append([]string{fullExecutablePath}, a.AppConfig.UMUOptions.LaunchArgs...)
 	cmd := exec.Command(umuRunPath, args...)
-	cmd.Env = buildUMUEnv(a, absPrefix)
+
+	cmd.Env = a.buildProtonEnv(absPrefix, protonBasePath, protonVersionInfo)
+	cmd.Env = append(cmd.Env, "PROTONPATH="+absProton)
+	if a.AppConfig.UMUOptions.GameID != "" {
+		cmd.Env = append(cmd.Env, "GAMEID="+a.AppConfig.UMUOptions.GameID)
+	}
+	if a.AppConfig.UMUOptions.Store != "" {
+		cmd.Env = append(cmd.Env, "STORE="+a.AppConfig.UMUOptions.Store)
+	}
+
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -284,18 +337,28 @@ func (a *App) ensureAllDependencies() error {
 }
 
 func (a *App) ensureProton() error {
-	if !dirExistsAndIsNotEmpty(a.ProtonPath) || a.ForceUpgrade {
-		fmt.Printf("-> Acquiring Proton '%s'...\n", a.AppConfig.ProtonVersion)
-		vinfo, ok := a.GlobalConfig.ProtonVersions[a.AppConfig.ProtonVersion]
-		if !ok || vinfo.URL == "" {
-			return fmt.Errorf("proton version '%s' not defined in runner.json", a.AppConfig.ProtonVersion)
+	vinfo := a.getProtonInfo()
+	if vinfo.Path != "" {
+		if _, err := os.Stat(vinfo.Path); os.IsNotExist(err) {
+			return fmt.Errorf("custom proton path does not exist: %s", vinfo.Path)
 		}
+		fmt.Println("-> Using local Proton version.")
+		return nil
+	}
+
+	if vinfo.URL == "" {
+		return fmt.Errorf("proton version '%s' has no URL or local path in runner.json", a.AppConfig.ProtonVersion)
+	}
+
+	protonPath := filepath.Join("proton", a.AppConfig.ProtonVersion)
+	if !dirExistsAndIsNotEmpty(protonPath) || a.ForceUpgrade {
+		fmt.Printf("-> Acquiring Proton '%s'...\n", a.AppConfig.ProtonVersion)
 		if a.ForceUpgrade {
-			if err := os.RemoveAll(a.ProtonPath); err != nil {
+			if err := os.RemoveAll(protonPath); err != nil {
 				return fmt.Errorf("failed to remove existing proton path: %w", err)
 			}
 		}
-		if err := downloadAndExtractArchive(vinfo.URL, a.ProtonPath); err != nil {
+		if err := downloadAndExtractArchive(vinfo.URL, protonPath); err != nil {
 			return fmt.Errorf("failed to acquire proton: %w", err)
 		}
 	}
@@ -310,15 +373,11 @@ func (a *App) ensureDependency(name, version string) error {
 	if dirExistsAndIsNotEmpty(depPath) {
 		return nil
 	}
+	vinfo, err := a.getDependencyInfo(name, version)
+	if err != nil {
+		return err
+	}
 	fmt.Printf("-> Acquiring %s '%s'...\n", name, version)
-	versionMap, ok := a.GlobalConfig.DependencyVersions[name]
-	if !ok {
-		return fmt.Errorf("dependency type '%s' not defined in runner.json", name)
-	}
-	vinfo, ok := versionMap[version]
-	if !ok || vinfo.URL == "" {
-		return fmt.Errorf("version '%s' for '%s' not defined in runner.json", version, name)
-	}
 	if err := downloadAndExtractArchive(vinfo.URL, depPath); err != nil {
 		return fmt.Errorf("failed to acquire dependency '%s': %w", name, err)
 	}
@@ -330,17 +389,35 @@ func (a *App) initializePrefix() error {
 	if err := mustCreateDirectory(absPrefix); err != nil {
 		return err
 	}
-	protonVersionInfo := a.GlobalConfig.ProtonVersions[a.AppConfig.ProtonVersion]
-	protonBin := protonBinPath(a.ProtonPath, protonVersionInfo)
-	wineBin := filepath.Join(protonBin, "wine64")
 
-	fmt.Println("-> Initializing Wine prefix...")
-	winebootCmd := exec.Command(wineBin, "wineboot", "-u")
-	winebootEnv := map[string]string{"WINEPREFIX": absPrefix}
-	if a.AppConfig.Dependencies.DXVKMode == "custom" || a.AppConfig.Dependencies.DXVKMode == "wined3d" {
-		winebootEnv["PROTON_USE_WINED3D"] = "1"
+	if !dirExistsAndIsNotEmpty(filepath.Join(absPrefix, "drive_c")) {
+		fmt.Println("-> Initializing Wine prefix...")
+		protonExecutable := a.getProtonExecutablePath()
+
+		var cmd *exec.Cmd
+		binName := a.getProtonBinName()
+		protonVersionInfo := a.getProtonInfo()
+		protonBasePath := a.getProtonPath(protonVersionInfo)
+
+		if binName == "proton" {
+			fmt.Println("-> Using 'proton run' for initialization.")
+			cmd = exec.Command(protonExecutable, "run")
+			cmd.Env = a.buildProtonEnv(absPrefix, protonBasePath, protonVersionInfo)
+		} else {
+			fmt.Printf("-> Using 'wineboot' with '%s' for initialization.\n", binName)
+			cmd = exec.Command(protonExecutable, "wineboot", "-u")
+			cmd.Env = os.Environ()
+			cmd.Env = append(cmd.Env, "WINEPREFIX="+absPrefix)
+		}
+
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("-> Prefix creation output:\n%s", string(output))
+			return fmt.Errorf("prefix initialization failed: %w", err)
+		}
+		fmt.Println("-> Prefix initialized successfully.")
 	}
-	return runCmd(winebootCmd, winebootEnv)
+	return nil
 }
 
 func (a *App) installCustomComponents() error {
@@ -382,11 +459,65 @@ func (a *App) installComponent(name, version, installPath string, dlls []string)
 
 // --- Helper Functions ---
 
+// NEW: Helper function to build the WINEDLLOVERRIDES string.
+func (a *App) buildDllOverridesString() string {
+	if len(a.AppConfig.DLLOverrides) == 0 {
+		return ""
+	}
+	var parts []string
+	for dll, setting := range a.AppConfig.DLLOverrides {
+		parts = append(parts, fmt.Sprintf("%s=%s", dll, setting))
+	}
+	return strings.Join(parts, ";")
+}
+
+func (a *App) getProtonInfo() VersionInfo {
+	vinfo, ok := a.GlobalConfig.ProtonVersions[a.AppConfig.ProtonVersion]
+	if !ok {
+		log.Fatalf("❌ Proton version '%s' not defined in runner.json", a.AppConfig.ProtonVersion)
+	}
+	return vinfo
+}
+
+func (a *App) getProtonPath(vinfo VersionInfo) string {
+	if vinfo.Path != "" {
+		return vinfo.Path
+	}
+	return filepath.Join("proton", a.AppConfig.ProtonVersion)
+}
+
+func (a *App) getProtonBinName() string {
+	if a.AppConfig.ProtonBinName == "" {
+		return "proton"
+	}
+	return a.AppConfig.ProtonBinName
+}
+
+func (a *App) getProtonExecutablePath() string {
+	protonVersionInfo := a.getProtonInfo()
+	protonBasePath := a.getProtonPath(protonVersionInfo)
+	binName := a.getProtonBinName()
+	return filepath.Join(protonBasePath, binName)
+}
+
+func (a *App) getDependencyInfo(name, version string) (VersionInfo, error) {
+	vinfoMap, ok := a.GlobalConfig.DependencyVersions[name]
+	if !ok {
+		return VersionInfo{}, fmt.Errorf("dependency type '%s' not defined in runner.json", name)
+	}
+	vinfo, ok := vinfoMap[version]
+	if !ok {
+		return VersionInfo{}, fmt.Errorf("version '%s' for '%s' not defined in runner.json", version, name)
+	}
+	return vinfo, nil
+}
+
 func ensureAppDirAndDefaultConfig(appDir, appType string) error {
 	configName := "game.json"
 	if appType == "apps" {
 		configName = "app.json"
 	}
+
 	if _, err := os.Stat(appDir); os.IsNotExist(err) {
 		fmt.Printf("-> Directory '%s' not found. Creating it with a default config...\n", appDir)
 		if err := mustCreateDirectory(appDir); err != nil {
@@ -394,6 +525,7 @@ func ensureAppDirAndDefaultConfig(appDir, appType string) error {
 		}
 		defaultCfg := AppConfig{
 			ProtonVersion: "PLEASE_SET_A_VERSION_FROM_RUNNER.JSON",
+			ProtonBinName: "proton",
 			Executable:    "drive_c/path/to/your/app.exe",
 		}
 		if err := writeJSONFile(filepath.Join(appDir, configName), defaultCfg); err != nil {
@@ -423,13 +555,13 @@ func loadOrCreateGlobalConfig(path string) (GlobalConfig, error) {
 	if os.IsNotExist(err) {
 		fmt.Println("-> No global 'runner.json' found. Creating a default one.")
 		defaultCfg := GlobalConfig{
-			ProtonVersions:     map[string]VersionInfo{"EDIT_ME": {URL: "URL_TO_PROTON_TAR"}},
+			ProtonVersions:     map[string]VersionInfo{"EDIT_ME": {URL: "URL_TO_PROTON_TAR", Path: "OR_PROVIDE_ABSOLUTE_PATH_TO_PROTON_DIR"}},
 			DependencyVersions: map[string]map[string]VersionInfo{"dxvk": {"EDIT_ME": {URL: "URL_TO_DXVK_TAR"}}},
 		}
 		if err := writeJSONFile(path, defaultCfg); err != nil {
 			return GlobalConfig{}, fmt.Errorf("failed writing default runner.json: %w", err)
 		}
-		fmt.Println("✅ Default runner.json created. Please edit it with download URLs.")
+		fmt.Println("✅ Default runner.json created. Please edit it with download URLs or local paths.")
 		return defaultCfg, nil
 	}
 	if err != nil {
@@ -492,9 +624,10 @@ func downloadAndExtractArchive(source, destPath string) error {
 	if source == "" {
 		return errors.New("empty source")
 	}
+
 	var src io.ReadCloser
 	if strings.HasPrefix(source, "http") {
-		fmt.Printf("   Downloading from %s...\n", source)
+		fmt.Printf(" Downloading from %s...\n", source)
 		resp, err := http.Get(source)
 		if err != nil {
 			return fmt.Errorf("http get: %w", err)
@@ -505,7 +638,7 @@ func downloadAndExtractArchive(source, destPath string) error {
 		}
 		src = resp.Body
 	} else {
-		fmt.Printf("   Reading local file %s...\n", source)
+		fmt.Printf(" Reading local file %s...\n", source)
 		f, err := os.Open(source)
 		if err != nil {
 			return fmt.Errorf("open local file: %w", err)
@@ -547,7 +680,7 @@ func downloadAndExtractArchive(source, destPath string) error {
 
 func extractTar(r io.Reader, destPath string) error {
 	tr := tar.NewReader(r)
-	fmt.Println("   Extracting archive...")
+	fmt.Println(" Extracting archive...")
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -556,13 +689,12 @@ func extractTar(r io.Reader, destPath string) error {
 		if err != nil {
 			return fmt.Errorf("reading tar: %w", err)
 		}
-
 		parts := strings.Split(hdr.Name, string(filepath.Separator))
 		target := filepath.Join(destPath, strings.Join(parts[1:], string(filepath.Separator)))
-
 		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 			return fmt.Errorf("mkdir: %w", err)
 		}
+
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, 0755); err != nil {
@@ -573,7 +705,6 @@ func extractTar(r io.Reader, destPath string) error {
 			if err != nil {
 				return fmt.Errorf("create file: %w", err)
 			}
-
 			if _, err := io.Copy(out, tr); err != nil {
 				out.Close()
 				return fmt.Errorf("copy file: %w", err)
@@ -581,55 +712,6 @@ func extractTar(r io.Reader, destPath string) error {
 			out.Close()
 		}
 	}
-}
-
-func runCmd(cmd *exec.Cmd, extraEnv map[string]string) error {
-	if len(extraEnv) > 0 {
-		cmd.Env = os.Environ()
-		for k, v := range extraEnv {
-			cmd.Env = append(cmd.Env, k+"="+v)
-		}
-	}
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("command '%s' failed: %w", strings.Join(cmd.Args, " "), err)
-	}
-	return nil
-}
-
-func buildCommandEnv(a *App, absPrefix string) []string {
-	env := os.Environ()
-	env = append(env, "WINEPREFIX="+absPrefix, "STEAM_COMPAT_DATA_PATH="+absPrefix)
-	ldPath := fmt.Sprintf("%s:%s", filepath.Join(a.ProtonPath, "dist", "lib64"), filepath.Join(a.ProtonPath, "dist", "lib"))
-	env = append(env, "LD_LIBRARY_PATH="+ldPath)
-	for k, v := range a.AppConfig.EnvironmentVars {
-		env = append(env, k+"="+v)
-	}
-	return env
-}
-
-func buildUMUEnv(a *App, absPrefix string) []string {
-	env := os.Environ()
-	absProton := mustGetAbsolutePath(a.ProtonPath)
-	env = append(env, "WINEPREFIX="+absPrefix, "PROTONPATH="+absProton)
-	if a.AppConfig.UMUOptions.GameID != "" {
-		env = append(env, "GAMEID="+a.AppConfig.UMUOptions.GameID)
-	}
-	if a.AppConfig.UMUOptions.Store != "" {
-		env = append(env, "STORE="+a.AppConfig.UMUOptions.Store)
-	}
-	for k, v := range a.AppConfig.EnvironmentVars {
-		env = append(env, k+"="+v)
-	}
-	return env
-}
-
-func protonBinPath(protonPath string, vinfo VersionInfo) string {
-	if vinfo.BinPathInArchive != "" {
-		return filepath.Join(protonPath, vinfo.BinPathInArchive)
-	}
-	return filepath.Join(protonPath, "dist", "bin")
 }
 
 func readJSONFile(path string, v interface{}) error {
@@ -670,6 +752,7 @@ func dirExistsAndIsNotEmpty(path string) bool {
 		return false
 	}
 	defer f.Close()
+
 	_, err = f.Readdirnames(1)
 	return err == nil
 }
@@ -680,11 +763,13 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	defer in.Close()
+
 	out, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
+
 	if _, err := io.Copy(out, in); err != nil {
 		return err
 	}
