@@ -12,8 +12,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-
-	// "os/user"
 	"path/filepath"
 	"strings"
 
@@ -219,12 +217,8 @@ func (a *App) runDirectly() error {
 	protonVersionInfo := a.getProtonInfo()
 	protonBasePath := a.getProtonPath(protonVersionInfo)
 
-	if binName == "proton" {
-		actualPrefixRoot := filepath.Join(absPrefix, "pfx")
-		fullExecutablePath = filepath.Join(actualPrefixRoot, a.AppConfig.Executable)
-	} else {
-		fullExecutablePath = filepath.Join(absPrefix, a.AppConfig.Executable)
-	}
+	// For both proton and direct wine, the prefix is now flat.
+	fullExecutablePath = filepath.Join(absPrefix, a.AppConfig.Executable)
 
 	var cmd *exec.Cmd
 	if binName == "proton" {
@@ -255,8 +249,7 @@ func (a *App) runDirectly() error {
 }
 
 func (a *App) buildProtonEnv(absPrefix, protonBasePath string, vinfo VersionInfo) []string {
-	actualPrefixRoot := filepath.Join(absPrefix, "pfx")
-	clientInstallPath := filepath.Dir(filepath.Join(actualPrefixRoot, a.AppConfig.Executable))
+	clientInstallPath := filepath.Dir(filepath.Join(absPrefix, a.AppConfig.Executable))
 
 	env := os.Environ()
 	env = append(env, "STEAM_COMPAT_DATA_PATH="+absPrefix)
@@ -309,7 +302,7 @@ func (a *App) runWithUMU() error {
 	protonVersionInfo := a.getProtonInfo()
 	protonBasePath := a.getProtonPath(protonVersionInfo)
 	absProton := mustGetAbsolutePath(protonBasePath)
-	fullExecutablePath := filepath.Join(absPrefix, "pfx", a.AppConfig.Executable)
+	fullExecutablePath := filepath.Join(absPrefix, a.AppConfig.Executable)
 
 	args := append([]string{fullExecutablePath}, a.AppConfig.UMUOptions.LaunchArgs...)
 	cmd := exec.Command(umuRunPath, args...)
@@ -400,55 +393,32 @@ func (a *App) ensureDependency(name, version string) error {
 	return nil
 }
 
+// REFACTORED: Now uses a quick-exit command and restructures the prefix to the standard flat layout.
 func (a *App) initializePrefix() error {
 	absPrefix := mustGetAbsolutePath(a.PrefixPath)
 	if err := mustCreateDirectory(absPrefix); err != nil {
 		return err
 	}
 
-	if _, err := os.Stat(filepath.Join(absPrefix, "pfx", "system.reg")); err == nil {
-		return nil
-	}
 	if _, err := os.Stat(filepath.Join(absPrefix, "system.reg")); err == nil {
-		return nil
+		return nil // Prefix already exists and is flat
 	}
 
 	fmt.Println("-> Initializing Wine prefix...")
 	protonExecutable := a.getProtonExecutablePath()
 
 	var cmd *exec.Cmd
-	launchMethod := a.AppConfig.LaunchMethod
-	if launchMethod == "" {
-		launchMethod = "direct"
-	}
-
 	binName := a.getProtonBinName()
 	protonVersionInfo := a.getProtonInfo()
 	protonBasePath := a.getProtonPath(protonVersionInfo)
 
-	if launchMethod == "umu" {
-		fmt.Println("-> Using 'umu-launcher' for SLR-compliant prefix initialization.")
-		umuRunPath := "umu-run"
-		if !a.AppConfig.UMUOptions.UseSystemBinary {
-			ver := a.AppConfig.UMUOptions.Version
-			if ver == "" {
-				return errors.New("'umu_options.version' must be set in game.json")
-			}
-			vinfo, err := a.getDependencyInfo("umu-launcher", ver)
-			if err != nil {
-				return err
-			}
-			umuRunPath = filepath.Join("dependencies", "umu-launcher", ver, vinfo.BinPath, "umu-run")
-		}
-		cmd = exec.Command(umuRunPath, "")
-		cmd.Env = a.buildProtonEnv(absPrefix, protonBasePath, protonVersionInfo)
-		cmd.Env = append(cmd.Env, "PROTONPATH="+mustGetAbsolutePath(protonBasePath))
-
-	} else if binName == "proton" {
-		fmt.Println("-> Using 'proton run explorer' for initialization.")
-		cmd = exec.Command(protonExecutable, "run", "explorer")
+	if binName == "proton" {
+		// 1. Use a quick-exit command to create the nested prefix
+		fmt.Println("-> Using 'proton run cmd' for initialization.")
+		cmd = exec.Command(protonExecutable, "run", "cmd", "/c", "echo", "Initializing...")
 		cmd.Env = a.buildProtonEnv(absPrefix, protonBasePath, protonVersionInfo)
 	} else {
+		// wineboot already creates a flat prefix, no shuffle needed
 		fmt.Printf("-> Using 'wineboot' with '%s' for initialization.\n", binName)
 		cmd = exec.Command(protonExecutable, "wineboot", "-u")
 		cmd.Env = os.Environ()
@@ -464,6 +434,38 @@ func (a *App) initializePrefix() error {
 	}
 	fmt.Println("-> Prefix initialized successfully.")
 
+	// 2. If Proton created a nested 'pfx' directory, restructure it.
+	if binName == "proton" {
+		fmt.Println("-> Restructuring prefix to standard layout...")
+		pfxDir := filepath.Join(absPrefix, "pfx")
+
+		// Check if pfxDir actually exists before trying to shuffle
+		if _, err := os.Stat(pfxDir); err == nil {
+			// Move contents of pfx up to the parent
+			files, err := filepath.Glob(filepath.Join(pfxDir, "*"))
+			if err != nil {
+				return fmt.Errorf("could not list files in pfx dir for restructuring: %w", err)
+			}
+			for _, file := range files {
+				dest := filepath.Join(absPrefix, filepath.Base(file))
+				if err := os.Rename(file, dest); err != nil {
+					return fmt.Errorf("failed to move '%s' during restructure: %w", file, err)
+				}
+			}
+
+			// Remove the now-empty pfx directory
+			if err := os.Remove(pfxDir); err != nil {
+				return fmt.Errorf("failed to remove temporary pfx directory: %w", err)
+			}
+
+			// Recreate pfx as a symlink to the parent
+			if err := os.Symlink(".", pfxDir); err != nil {
+				return fmt.Errorf("failed to create pfx symlink: %w", err)
+			}
+			fmt.Println("-> Prefix restructured.")
+		}
+	}
+
 	return nil
 }
 
@@ -475,6 +477,7 @@ func (a *App) installCustomComponents() error {
 	}
 	vkd3dList := []string{"d3d12.dll", "d3d12core.dll"}
 
+	// After restructuring, the actual prefix is the root, so we don't need the 'pfx' subdir in the path.
 	if err := a.installComponent("dxvk", a.AppConfig.Dependencies.DXVKVersion, a.AppConfig.Dependencies.DXVKInstallPath, dxvkMap[a.AppConfig.Dependencies.DXVKDirectXVersion]); err != nil {
 		return err
 	}
@@ -490,7 +493,7 @@ func (a *App) installComponent(name, version, installPath string, dlls []string)
 	}
 	fmt.Printf("-> Installing custom %s DLLs...\n", name)
 	sourceDir := filepath.Join("dependencies", name, version, "x64")
-	destDir := filepath.Join(mustGetAbsolutePath(a.PrefixPath), "pfx", "drive_c", installPath)
+	destDir := filepath.Join(mustGetAbsolutePath(a.PrefixPath), "drive_c", installPath)
 	if err := mustCreateDirectory(destDir); err != nil {
 		return err
 	}
@@ -808,7 +811,6 @@ func mustGetAbsolutePath(p string) string {
 	return abs
 }
 
-// RESTORED: These helper functions were accidentally deleted in a previous refactor.
 func dirExistsAndIsNotEmpty(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil || !info.IsDir() {
