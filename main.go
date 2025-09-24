@@ -93,15 +93,29 @@ func main() {
 	gameName := flag.String("game", "", "The name of the game directory inside ./games/.")
 	appName := flag.String("app", "", "The name of the application directory inside ./apps/.")
 	upgradeProton := flag.Bool("upgrade-proton", false, "Force re-download of the Proton version specified in the config.")
+	packageFormat := flag.String("format", "gz", "Compression format for packaging (gz, xz, zst).")
 	flag.Parse()
 
 	if flag.NArg() == 0 {
-		log.Fatalf("❌ Error: No command provided. Use 'setup', 'package', or 'run'.")
+		log.Fatalf("❌ Error: No command provided. Use 'setup', 'package', 'unpackage', or 'run'.")
 	}
 	command := flag.Arg(0)
 
+	if command == "unpackage" {
+		args := flag.Args()[1:]
+		archiveType := "game" // Default type
+		if len(args) > 0 && (args[0] == "app" || args[0] == "game") {
+			archiveType = args[0]
+			args = args[1:]
+		}
+		if err := UnpackageArchives(archiveType, args); err != nil {
+			log.Fatalf("❌ Unpackaging failed: %v", err)
+		}
+		return
+	}
+
 	if *gameName == "" && *appName == "" {
-		log.Fatalf("❌ Error: --game or --app flag is required.")
+		log.Fatalf("❌ Error: --game or --app flag is required for this command.")
 	}
 
 	targetType := "games"
@@ -135,7 +149,7 @@ func main() {
 			log.Fatalf("❌ Setup failed: %v", err)
 		}
 	case "package":
-		if err := app.Package(); err != nil {
+		if err := app.Package(*packageFormat); err != nil {
 			log.Fatalf("❌ Packaging failed: %v", err)
 		}
 	case "run":
@@ -143,8 +157,55 @@ func main() {
 			log.Fatalf("❌ Run failed: %v", err)
 		}
 	default:
-		log.Fatalf("❌ Error: Unknown command '%s'. Use 'setup', 'package', or 'run'.", command)
+		log.Fatalf("❌ Error: Unknown command '%s'.", command)
 	}
+}
+
+// --- Archive Struct and Methods ---
+
+// Archive represents a local or remote archive file.
+type Archive struct {
+	// Source can be a URL or a local file path.
+	Source string
+}
+
+// open returns a readable stream for the archive, whether local or remote.
+func (a *Archive) open() (io.ReadCloser, error) {
+	if strings.HasPrefix(a.Source, "http") {
+		fmt.Printf(" Downloading from %s...\n", a.Source)
+		resp, err := http.Get(a.Source)
+		if err != nil {
+			return nil, fmt.Errorf("http get: %w", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("download failed: %s", resp.Status)
+		}
+		return resp.Body, nil
+	}
+
+	fmt.Printf(" Reading local file %s...\n", a.Source)
+	return os.Open(a.Source)
+}
+
+// Extract unpacks the archive to the given destination path.
+func (a *Archive) Extract(destPath string) error {
+	if a.Source == "" {
+		return errors.New("archive source cannot be empty")
+	}
+
+	stream, err := a.open()
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	decompressedReader, err := getDecompressedReader(stream, a.Source)
+	if err != nil {
+		return err
+	}
+
+	return extractTar(decompressedReader, destPath)
 }
 
 // --- Core App Methods ---
@@ -167,18 +228,70 @@ func (a *App) Setup() error {
 	return nil
 }
 
-func (a *App) Package() error {
+func (a *App) Package(format string) error {
 	fmt.Println("📦 Starting packaging process...")
 	if _, err := os.Stat(a.AppDir); os.IsNotExist(err) {
 		return fmt.Errorf("application directory '%s' not found", a.AppDir)
 	}
-	packageName := filepath.Base(a.AppDir) + ".tar.gz"
-	fmt.Printf("-> Creating bundle '%s'...\n", packageName)
-	if err := createBundle(packageName, a.AppDir); err != nil {
+
+	var extension string
+	switch format {
+	case "gz":
+		extension = ".tar.gz"
+	case "xz":
+		extension = ".tar.xz"
+	case "zst":
+		extension = ".tar.zst"
+	default:
+		return fmt.Errorf("unsupported package format: %s. Use 'gz', 'xz', or 'zst'", format)
+	}
+
+	packageName := filepath.Base(a.AppDir) + extension
+	fmt.Printf("-> Creating %s bundle '%s'...\n", strings.ToUpper(format), packageName)
+	if err := createBundle(packageName, a.AppDir, format); err != nil {
 		return fmt.Errorf("failed to create package: %w", err)
 	}
 	fmt.Println("\n✅ Packaging complete!")
 	fmt.Printf("➡️ Distribute '%s' to other machines.\n", packageName)
+	return nil
+}
+
+func UnpackageArchives(archiveType string, archivePaths []string) error {
+	if len(archivePaths) == 0 {
+		return errors.New("no archive files provided")
+	}
+	fmt.Println("📦 Starting unpackaging process...")
+	for _, archivePath := range archivePaths {
+		fmt.Printf("-> Unpackaging '%s'...\n", archivePath)
+
+		baseName := filepath.Base(archivePath)
+		var nameWithoutExt string
+		if strings.HasSuffix(baseName, ".tar.gz") {
+			nameWithoutExt = strings.TrimSuffix(baseName, ".tar.gz")
+		} else if strings.HasSuffix(baseName, ".tar.xz") {
+			nameWithoutExt = strings.TrimSuffix(baseName, ".tar.xz")
+		} else if strings.HasSuffix(baseName, ".tar.zst") {
+			nameWithoutExt = strings.TrimSuffix(baseName, ".tar.zst")
+		} else {
+			log.Printf("⚠️  Skipping '%s': unrecognized archive extension.", archivePath)
+			continue
+		}
+
+		destPath := filepath.Join(archiveType+"s", nameWithoutExt)
+
+		if _, err := os.Stat(destPath); err == nil {
+			log.Printf("⚠️  Skipping '%s': destination '%s' already exists.", archivePath, destPath)
+			continue
+		}
+
+		archive := &Archive{Source: archivePath}
+		if err := archive.Extract(destPath); err != nil {
+			log.Printf("❌ Failed to unpackage '%s': %v", archivePath, err)
+		} else {
+			fmt.Printf("✅ Successfully unpackaged to '%s'\n", destPath)
+		}
+	}
+	fmt.Println("\n✨ Unpackaging complete!")
 	return nil
 }
 
@@ -193,7 +306,7 @@ func (a *App) Run() error {
 
 	launchMethod := a.AppConfig.LaunchMethod
 	if launchMethod == "" {
-		launchMethod = "direct" // Default to direct
+		launchMethod = "direct"
 	}
 
 	fmt.Printf("-> Using launch method from game.json: %s\n", launchMethod)
@@ -217,8 +330,11 @@ func (a *App) runDirectly() error {
 	protonVersionInfo := a.getProtonInfo()
 	protonBasePath := a.getProtonPath(protonVersionInfo)
 
-	// For both proton and direct wine, the prefix is now flat.
-	fullExecutablePath = filepath.Join(absPrefix, a.AppConfig.Executable)
+	if binName == "proton" {
+		fullExecutablePath = filepath.Join(absPrefix, "pfx", a.AppConfig.Executable)
+	} else {
+		fullExecutablePath = filepath.Join(absPrefix, a.AppConfig.Executable)
+	}
 
 	var cmd *exec.Cmd
 	if binName == "proton" {
@@ -368,7 +484,8 @@ func (a *App) ensureProton() error {
 				return fmt.Errorf("failed to remove existing proton path: %w", err)
 			}
 		}
-		if err := downloadAndExtractArchive(vinfo.URL, protonPath); err != nil {
+		archive := &Archive{Source: vinfo.URL}
+		if err := archive.Extract(protonPath); err != nil {
 			return fmt.Errorf("failed to acquire proton: %w", err)
 		}
 	}
@@ -386,14 +503,14 @@ func (a *App) ensureDependency(name, version string) error {
 			return err
 		}
 		fmt.Printf("-> Acquiring %s '%s'...\n", name, version)
-		if err := downloadAndExtractArchive(vinfo.URL, depPath); err != nil {
+		archive := &Archive{Source: vinfo.URL}
+		if err := archive.Extract(depPath); err != nil {
 			return fmt.Errorf("failed to acquire dependency '%s': %w", name, err)
 		}
 	}
 	return nil
 }
 
-// REFACTORED: Now uses a quick-exit command and restructures the prefix to the standard flat layout.
 func (a *App) initializePrefix() error {
 	absPrefix := mustGetAbsolutePath(a.PrefixPath)
 	if err := mustCreateDirectory(absPrefix); err != nil {
@@ -401,7 +518,7 @@ func (a *App) initializePrefix() error {
 	}
 
 	if _, err := os.Stat(filepath.Join(absPrefix, "system.reg")); err == nil {
-		return nil // Prefix already exists and is flat
+		return nil
 	}
 
 	fmt.Println("-> Initializing Wine prefix...")
@@ -413,12 +530,10 @@ func (a *App) initializePrefix() error {
 	protonBasePath := a.getProtonPath(protonVersionInfo)
 
 	if binName == "proton" {
-		// 1. Use a quick-exit command to create the nested prefix
 		fmt.Println("-> Using 'proton run cmd' for initialization.")
 		cmd = exec.Command(protonExecutable, "run", "cmd", "/c", "echo", "Initializing...")
 		cmd.Env = a.buildProtonEnv(absPrefix, protonBasePath, protonVersionInfo)
 	} else {
-		// wineboot already creates a flat prefix, no shuffle needed
 		fmt.Printf("-> Using 'wineboot' with '%s' for initialization.\n", binName)
 		cmd = exec.Command(protonExecutable, "wineboot", "-u")
 		cmd.Env = os.Environ()
@@ -434,14 +549,11 @@ func (a *App) initializePrefix() error {
 	}
 	fmt.Println("-> Prefix initialized successfully.")
 
-	// 2. If Proton created a nested 'pfx' directory, restructure it.
 	if binName == "proton" {
 		fmt.Println("-> Restructuring prefix to standard layout...")
 		pfxDir := filepath.Join(absPrefix, "pfx")
 
-		// Check if pfxDir actually exists before trying to shuffle
 		if _, err := os.Stat(pfxDir); err == nil {
-			// Move contents of pfx up to the parent
 			files, err := filepath.Glob(filepath.Join(pfxDir, "*"))
 			if err != nil {
 				return fmt.Errorf("could not list files in pfx dir for restructuring: %w", err)
@@ -453,12 +565,10 @@ func (a *App) initializePrefix() error {
 				}
 			}
 
-			// Remove the now-empty pfx directory
 			if err := os.Remove(pfxDir); err != nil {
 				return fmt.Errorf("failed to remove temporary pfx directory: %w", err)
 			}
 
-			// Recreate pfx as a symlink to the parent
 			if err := os.Symlink(".", pfxDir); err != nil {
 				return fmt.Errorf("failed to create pfx symlink: %w", err)
 			}
@@ -477,7 +587,6 @@ func (a *App) installCustomComponents() error {
 	}
 	vkd3dList := []string{"d3d12.dll", "d3d12core.dll"}
 
-	// After restructuring, the actual prefix is the root, so we don't need the 'pfx' subdir in the path.
 	if err := a.installComponent("dxvk", a.AppConfig.Dependencies.DXVKVersion, a.AppConfig.Dependencies.DXVKInstallPath, dxvkMap[a.AppConfig.Dependencies.DXVKDirectXVersion]); err != nil {
 		return err
 	}
@@ -620,17 +729,31 @@ func loadOrCreateGlobalConfig(path string) (GlobalConfig, error) {
 	return g, nil
 }
 
-func createBundle(bundleName, sourceDir string) error {
+func createBundle(bundleName, sourceDir, format string) error {
 	f, err := os.Create(bundleName)
 	if err != nil {
 		return fmt.Errorf("create bundle: %w", err)
 	}
 	defer f.Close()
 
-	gw := gzip.NewWriter(f)
-	defer gw.Close()
+	var compressor io.WriteCloser
+	switch format {
+	case "gz":
+		compressor = gzip.NewWriter(f)
+	case "xz":
+		compressor, err = xz.NewWriter(f)
+		if err != nil {
+			return fmt.Errorf("create xz writer: %w", err)
+		}
+	case "zst":
+		compressor, err = zstd.NewWriter(f)
+		if err != nil {
+			return fmt.Errorf("create zstd writer: %w", err)
+		}
+	}
+	defer compressor.Close()
 
-	tw := tar.NewWriter(gw)
+	tw := tar.NewWriter(compressor)
 	defer tw.Close()
 
 	return filepath.Walk(sourceDir, func(path string, fi os.FileInfo, err error) error {
@@ -653,6 +776,12 @@ func createBundle(bundleName, sourceDir string) error {
 			}
 			header.Linkname = linkTarget
 		}
+
+		header.Uid = 65534
+		header.Gid = 65534
+		header.Uname = "nobody"
+		header.Gname = "nobody"
+
 		if err := tw.WriteHeader(header); err != nil {
 			return err
 		}
@@ -670,62 +799,19 @@ func createBundle(bundleName, sourceDir string) error {
 	})
 }
 
-func downloadAndExtractArchive(source, destPath string) error {
-	if source == "" {
-		return errors.New("empty source")
-	}
-
-	var src io.ReadCloser
-	if strings.HasPrefix(source, "http") {
-		fmt.Printf(" Downloading from %s...\n", source)
-		resp, err := http.Get(source)
-		if err != nil {
-			return fmt.Errorf("http get: %w", err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			return fmt.Errorf("download failed: %s", resp.Status)
-		}
-		src = resp.Body
-	} else {
-		fmt.Printf(" Reading local file %s...\n", source)
-		f, err := os.Open(source)
-		if err != nil {
-			return fmt.Errorf("open local file: %w", err)
-		}
-		src = f
-	}
-	defer src.Close()
-
-	var rdr io.Reader
+func getDecompressedReader(r io.Reader, sourceFilename string) (io.Reader, error) {
 	switch {
-	case strings.HasSuffix(source, ".tar.gz"):
-		gzr, err := gzip.NewReader(src)
-		if err != nil {
-			return fmt.Errorf("gzip reader: %w", err)
-		}
-		defer gzr.Close()
-		rdr = gzr
-	case strings.HasSuffix(source, ".tar.xz"):
-		xzr, err := xz.NewReader(src)
-		if err != nil {
-			return fmt.Errorf("xz reader: %w", err)
-		}
-		rdr = xzr
-	case strings.HasSuffix(source, ".tar.zst"):
-		zr, err := zstd.NewReader(src)
-		if err != nil {
-			return fmt.Errorf("zstd reader: %w", err)
-		}
-		defer zr.Close()
-		rdr = zr
-	case strings.HasSuffix(source, ".tar"):
-		rdr = src
+	case strings.HasSuffix(sourceFilename, ".tar.gz"):
+		return gzip.NewReader(r)
+	case strings.HasSuffix(sourceFilename, ".tar.xz"):
+		return xz.NewReader(r)
+	case strings.HasSuffix(sourceFilename, ".tar.zst"):
+		return zstd.NewReader(r)
+	case strings.HasSuffix(sourceFilename, ".tar"):
+		return r, nil
 	default:
-		return fmt.Errorf("unsupported archive format: %s", source)
+		return nil, fmt.Errorf("unsupported archive format: %s", sourceFilename)
 	}
-
-	return extractTar(rdr, destPath)
 }
 
 func extractTar(r io.Reader, destPath string) error {
