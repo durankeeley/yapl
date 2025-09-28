@@ -12,17 +12,19 @@ import (
 // --- Configuration Structs ---
 
 type VersionInfo struct {
-	URL                   string   `json:"url,omitempty"`
-	Path                  string   `json:"path,omitempty"`
-	BinPath               string   `json:"bin_path,omitempty"`
-	LaunchMethod          string   `json:"launch_method,omitempty"`
-	WineDllPathComponents []string `json:"wine_dll_path_components,omitempty"`
-	PythonHome            string   `json:"python_home,omitempty"`
-	PythonPath            string   `json:"python_path,omitempty"`
+	URL                     string   `json:"url,omitempty"`
+	Path                    string   `json:"path,omitempty"`
+	BinPath                 string   `json:"bin_path,omitempty"`
+	CheckForUpdates         bool     `json:"check_for_updates,omitempty"`
+	LDLibraryPathComponents []string `json:"ld_library_path_components,omitempty"`
+	WineDllPathComponents   []string `json:"wine_dll_path_components,omitempty"`
+	PythonHome              string   `json:"python_home,omitempty"`
+	PythonPath              string   `json:"python_path,omitempty"`
 }
 
 type Global struct {
 	ProtonVersions     map[string]VersionInfo            `json:"proton_versions"`
+	RuntimeVersions    map[string]VersionInfo            `json:"runtime_versions"`
 	DependencyVersions map[string]map[string]VersionInfo `json:"dependency_versions"`
 }
 
@@ -45,8 +47,8 @@ type AppDependencies struct {
 
 type App struct {
 	ProtonVersion   string            `json:"proton_version"`
+	RuntimeVersion  string            `json:"runtime_version,omitempty"`
 	LaunchMethod    string            `json:"launch_method,omitempty"`
-	ProtonBinName   string            `json:"proton_bin_name,omitempty"`
 	Executable      string            `json:"executable"`
 	SteamAppID      string            `json:"steam_app_id,omitempty"`
 	WineArch        string            `json:"wine_arch,omitempty"`
@@ -68,6 +70,7 @@ func LoadOrCreateGlobal(path string) (Global, error) {
 	fmt.Println("-> No global 'runner.json' found. Creating a default one.")
 	defaultCfg := Global{
 		ProtonVersions:     map[string]VersionInfo{"EDIT_ME": {URL: "URL_TO_PROTON_TAR", Path: "OR_PROVIDE_ABSOLUTE_PATH_TO_PROTON_DIR"}},
+		RuntimeVersions:    map[string]VersionInfo{"sniper": {URL: "https://repo.steampowered.com/steamrt-images-sniper/snapshots/latest-container-runtime-public-beta/SteamLinuxRuntime_sniper.tar.xz", CheckForUpdates: true}},
 		DependencyVersions: map[string]map[string]VersionInfo{"dxvk": {"EDIT_ME": {URL: "URL_TO_DXVK_TAR"}}},
 	}
 	if err := writeJSONFile(path, defaultCfg); err != nil {
@@ -88,7 +91,7 @@ func LoadOrCreateApp(appType, appName string, globalCfg Global) (App, error) {
 	var cfg App
 	err := readJSONFile(configPath, &cfg)
 	if !os.IsNotExist(err) {
-		return cfg, err
+		return cfg, err // Return on success or any error other than file not found
 	}
 
 	fmt.Printf("-> No config found. Creating a default '%s' in '%s'...\n", configName, appDir)
@@ -105,7 +108,6 @@ func LoadOrCreateApp(appType, appName string, globalCfg Global) (App, error) {
 	defaultCfg := App{
 		ProtonVersion: firstProton,
 		LaunchMethod:  "direct",
-		ProtonBinName: "proton",
 		Executable:    "drive_c/windows/explorer.exe",
 	}
 

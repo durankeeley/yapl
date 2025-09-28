@@ -1,174 +1,88 @@
 # YAPL (Yet Another Proton Launcher)
 
-## Why YAPL Exists
+### Why I Made This
 
-I was building devices for a LAN party and I needed a way to build and test a game on one machine, package it up completely, copy it to another machine, test again and have it work (mostly). 
+I originally built YAPL as I was setting up a bunch of PCs for a LAN party. I needed a way to get a game running perfectly on one machine, package it up completely, copy it to another machine, and have it **just work** (mostly).
 
-YAPL fixes "it works on my machine" this by treating game setups as **environments as code**. Every requirement — Proton build, DXVK version, launch options — is locked into a simple JSON config. Combine that with **umu-launcher**, which brings a universal runtime and a huge patch library, and you get portable game environments that are reproducible across any machine.
+YAPL tries solves the classic "it works on my machine" problem by treating your entire game setup as code. Every requirement, like the specific Proton build, DXVK version, and launch options, is defined in a simple JSON file. This lets you create reproducible, portable game environments that work the same way.
 
 ---
 
 ## How It Works
 
-YAPL keeps things simple and organised:
+YAPL keeps things simple and organized.
 
-* **Runner**: One self-contained Go binary. No external dependencies, runs on almost any Linux distro.
-* **Shared Components**:
-
-  * `./proton/` for Proton builds (downloaded once, reused everywhere)
-  * `./dependencies/` for DXVK, VKD3D, umu-launcher, etc.
-* **Game Prefixes**:
-
-  * `./games/` and `./apps/` each hold prefixes and configs.
-* **Configs as Code**:
-
-  * `runner.json` defines available Proton and dependencies.
-  * `game.json` defines what each game actually uses.
+* **A Single Binary**: The whole tool is a single `yapl` file compiled from Go. It has no external dependencies, so it runs on pretty much any modern Linux distro.
+* **Shared Tools**: All your downloaded tools (like Proton and DXVK) are stored in one central place and cleverly reused across all your games and apps.
+    * `./proton/`: Stores different Proton builds.
+    * `./dependencies/`: Stores shared dependencies like DXVK, VKD33D, and `umu-launcher`.
+* **Isolated Game Environments**: Each game gets its own clean Wine prefix and configuration, so they never interfere with each other.
+    * `./games/`: Each subfolder in here contains a specific game's setup.
+    * `./apps/`: Same structure, but for general-purpose applications.
+* **Simple JSON Configs**:
+    * `runner.json`: This is your global toolbox. It lists all the available versions of Proton and other tools, along with their download URLs.
+    * `game.json` (or `app.json`): This local config sits inside each game's folder and tells YAPL exactly which tools and settings to use from the global `runner.json`.
 
 ---
 
-## Example: runner.json
+## Quick Start 🚀
 
-```json
-{
-  "proton_versions": {
-    "ge-proton-8": {
-      "url": "https://github.com/GloriousEggroll/wine-ge-custom/releases/download/GE-Proton8-26/wine-lutris-GE-Proton8-26-x86_64.tar.xz",
-      "bin_path_in_archive": "files/bin"
-    },
-    "cachyos-proton-10": {
-      "url": "https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-10.0-20250906-slr/proton-cachyos-10.0-20250906-slr-x86_64_v3.tar.xz",
-      "bin_path_in_archive": "files/bin"
-    }
-  },
-  "dependency_versions": {
-    "umu-launcher": {
-      "1.2.9": {
-        "url": "https://github.com/Open-Wine-Components/umu-launcher/releases/download/1.2.9/umu-launcher-1.2.9-zipapp.tar"
-      }
-    },
-    "dxvk": {
-      "v2.7.1": {
-        "url": "https://github.com/doitsujin/dxvk/releases/download/v2.7.1/dxvk-2.7.1.tar.gz"
-      }
-    },
-    "vkd3d": {
-      "v2.14.1": {
-        "url": "https://github.com/HansKristian-Work/vkd3d-proton/releases/download/v2.14.1/vkd3d-proton-2.14.1.tar.zst"
-      }
-    }
-  }
-}
+### 1. Initialize a Game Directory
+This command creates the folder structure and a default `game.json` for you.
+
+```bash
+./yapl --game "My Awesome Game" setup
+````
+
+### 2\. Edit Your Configs
+
+First, open the main `runner.json` file and add the download URLs for the Proton builds and other tools you want to use.
+
+Next, open `games/My Awesome Game/game.json` and tell it which versions you want this specific game to use. You'll also need to set the path to your game's main executable here.
+
+### 3\. Install & Package Your Game
+
+Run the `setup` command again. This time, it will download all the components you just configured.
+
+```bash
+./yapl --game "My Awesome Game" setup
 ```
 
----
+Now, install your game into the new prefix, usually somewhere inside `games/My Awesome Game/prefix/drive_c/`. Once it's installed and ready, you can package the entire environment into a single, portable archive.
 
-## Example: game.json
-
-```json
-{
-  "proton_version": "cachyos-proton-10",
-  "executable": "drive_c/UnrealTournament/System/UnrealTournament.exe",
-  "use_umu_launcher": true,
-  "umu_options": {
-    "version": "1.2.9",
-    "use_system_binary": false,
-    "game_id": "ut99",
-    "store": "local",
-    "launch_args": [
-      "-opengl",
-      "-SkipBuildPatchPrereq"
-    ]
-  },
-  "dependencies": {
-    "dxvk_mode": "proton"
-  },
-  "dll_overrides": {
-    "dinput8": "n,b"
-  },
-  "environment_vars": {}
-}
+```bash
+./yapl --game "My Awesome Game" package --format xz
 ```
 
----
+### 4\. Run the Game
 
-## Understanding `dxvk_mode`
+That's it\! Now you can launch the game with all its dependencies perfectly configured.
 
-This key controls how DirectX gets translated to Vulkan.
+```bash
+./yapl --game "My Awesome Game" run
+```
 
-* **`custom` (default)**
+-----
 
-  * Uses exact DXVK and VKD3D versions from your global `runner.json`
-  * Installs them into the game directory during setup
-  * Best when a game needs a very specific version
+## Command Reference
 
-* **`proton`**
+| Command | Description |
+| :--- | :--- |
+| `setup` | Creates the Wine prefix and downloads all defined dependencies. |
+| `run` | Launches the application using the configured environment. |
+| `package` | Compresses the entire game/app directory into a single `.tar` archive. |
+| `unpackage` | Extracts one or more game/app archives into the appropriate directory. |
 
-  * Uses DXVK and VKD3D bundled in your chosen Proton build
-  * No custom downloads
-  * Good for most games where Proton defaults are fine
+## Flags
 
-* **`wined3d`**
+| Flag | Description |
+| :--- | :--- |
+| `--game <name>` | Specifies the target game directory within `./games/`. |
+| `--app <name>` | Specifies the target app directory within `./apps/`. |
+| `--upgrade-proton` | Forces a re-download of the configured Proton version. |
+| `--format <type>` | Sets the compression format for `package`. Options: `gz`, `xz`, `zst`. (Default: `gz`) |
+| `--debug` | Enables verbose logging from Proton and DXVK. |
+| `--steam` | Launches an isolated Steam client inside the prefix instead of the configured executable. |
 
-  * Disables DXVK and VKD3D entirely
-  * Uses Wine’s built-in D3D-to-OpenGL/Vulkan libraries
-  * Useful for very old games or troubleshooting
-
----
-
-## Quick Start
-
-1. **Create a Game**
-
-   ```sh
-   mkdir -p games
-   ./runner --game UnrealTournament setup
-   ```
-
-   This creates `games/UnrealTournament/game.json`.
-
-2. **Edit runner.json**
-   Define Proton builds and dependencies with their URLs.
-
-3. **Edit game.json**
-   Tell YAPL which Proton, dependencies, and options your game needs.
-
-4. **Install and Package**
-
-   ```sh
-   ./runner --game UnrealTournament setup
-   ./runner --game UnrealTournament package
-   ```
-
-5. **Run**
-
-   ```sh
-   ./runner --game UnrealTournament run
-   ```
-
----
-
-## Commands
-
-| Command   | What it does                                              |
-| --------- | --------------------------------------------------------- |
-| `setup`   | Creates a new prefix, downloads deps, opens Wine Explorer |
-| `run`     | Launches the game or app                                  |
-| `package` | Creates a compressed tar.gz for easy sharing              |
-
-Flags:
-
-* `--game <name>`: work with a game in `./games/<name>`
-* `--app <name>`: work with an app in `./apps/<name>`
-* `--upgrade-proton`: force re-download of Proton
-
----
-
-## Build From Source
-
-```sh
-cd /path/to/yapl
-go get github.com/ulikunitz/xz
-go get github.com/klauspost/compress/zstd
-go build -o runner .
+```
 ```
