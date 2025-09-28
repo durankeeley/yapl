@@ -20,40 +20,33 @@ func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Glo
 	if err := fs.MustCreateDirectory(absPrefix); err != nil {
 		return err
 	}
-	// If system.reg exists, the prefix is already initialized.
 	if _, err := os.Stat(filepath.Join(absPrefix, "system.reg")); err == nil {
 		return nil
 	}
 
-	fmt.Println("-> Initializing Wine prefix...")
+	fmt.Println("-> Initializing Wine prefix using the proton script...")
+
 	protonVersionInfo := getProtonInfo(appCfg, globalCfg)
 	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo))
-	wineArch := getWineArch(appCfg)
+	protonScriptPath := getProtonScriptPath(appCfg, globalCfg)
 
-	// Find the correct wine executable based on the configured architecture.
-	wineExecutablePath, err := getWineExecutablePath(protonBasePath, wineArch)
-	if err != nil {
-		return fmt.Errorf("could not find a suitable wine executable for setup: %w", err)
+	if _, err := os.Stat(protonScriptPath); os.IsNotExist(err) {
+		return fmt.Errorf("could not find 'proton' script at %s. Cannot initialize prefix", protonScriptPath)
 	}
 
-	fmt.Printf("-> Creating %s prefix with wineboot...\n", wineArch)
+	cmd := exec.Command(protonScriptPath, "run", "cmd", "/c", "echo", "Initializing prefix...")
 
-	cmd := exec.Command(wineExecutablePath, "wineboot", "-u")
-
-	// For wineboot, we only need a minimal environment to ensure correct prefix creation.
-	env := os.Environ()
-	env = append(env, "WINEPREFIX="+absPrefix)
-	env = append(env, "WINEARCH="+wineArch)
-	cmd.Env = env
+	// The proton script requires the full environment, even for initialization.
+	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, false)
 
 	if err := cmd.Run(); err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			log.Printf("-> Prefix creation output:\n%s", string(exitError.Stderr))
 		}
-		return fmt.Errorf("prefix initialization with wineboot failed: %w", err)
+		return fmt.Errorf("prefix initialization with proton script failed: %w", err)
 	}
 
-	fmt.Println("-> Prefix initialized successfully.")
+	// The proton script creates a nested 'pfx' directory, so we need to flatten it.
 	return restructureProtonPrefix(absPrefix)
 }
 
@@ -184,7 +177,6 @@ func RunWithUMU(prefixPath string, appCfg config.App, globalCfg config.Global, d
 
 // buildProtonEnv constructs the necessary environment for Proton/Wine to run.
 func buildProtonEnv(absPrefix, protonBasePath string, appCfg config.App, vinfo config.VersionInfo, debug bool) []string {
-	// ... (This function is unchanged from the previous version)
 	clientInstallPath := filepath.Dir(filepath.Join(absPrefix, appCfg.Executable))
 	env := os.Environ()
 
@@ -228,6 +220,8 @@ func buildProtonEnv(absPrefix, protonBasePath string, appCfg config.App, vinfo c
 	env = append(env, "STEAM_COMPAT_SHADER_PATH="+filepath.Join(absPrefix, "shadercache"))
 	env = append(env, "PROTON_VERB=waitforexitandrun")
 
+	// Set UMU_ID for compatibility with patched Proton scripts like CachyOS.
+	// This signals that we are a third-party launcher.
 	var umuID string
 	if appCfg.SteamAppID != "" && appCfg.SteamAppID != "0" {
 		appID := appCfg.SteamAppID
@@ -236,6 +230,7 @@ func buildProtonEnv(absPrefix, protonBasePath string, appCfg config.App, vinfo c
 		env = append(env, "SteamGameId="+appID)
 		umuID = appID
 	} else {
+		// Use a default ID for non-steam games to ensure the safe launch path is taken.
 		umuID = "yapl-default"
 	}
 	env = append(env, "UMU_ID="+umuID)
