@@ -46,6 +46,9 @@ func (a *App) Setup() error {
 	if err := dependency.EnsureAll(a.AppConfig, a.ForceUpgrade, a.GlobalConfig); err != nil {
 		return err
 	}
+	if err := dependency.EnsureRuntime(a.AppConfig, a.GlobalConfig); err != nil {
+		return err
+	}
 	if err := command.InitializePrefix(a.PrefixPath, a.AppConfig, a.GlobalConfig); err != nil {
 		return err
 	}
