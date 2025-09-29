@@ -15,11 +15,12 @@ import (
 
 // InitializePrefix creates and sets up a new Wine prefix.
 // It will always use the 'proton' script for initialization as it's the most reliable method.
-func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Global) error {
+func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Global, debug bool) error {
 	absPrefix := fs.MustGetAbsolutePath(prefixPath)
 	if err := fs.MustCreateDirectory(absPrefix); err != nil {
 		return err
 	}
+	// If the prefix already exists (system.reg is present), do nothing.
 	if _, err := os.Stat(filepath.Join(absPrefix, "system.reg")); err == nil {
 		return nil
 	}
@@ -35,8 +36,6 @@ func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Glo
 	}
 
 	cmd := exec.Command(protonScriptPath, "run", "cmd", "/c", "echo", "Initializing prefix...")
-
-	// The proton script requires the full environment, even for initialization.
 	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, false)
 
 	if err := cmd.Run(); err != nil {
@@ -47,7 +46,20 @@ func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Glo
 	}
 
 	// The proton script creates a nested 'pfx' directory, so we need to flatten it.
-	return restructureProtonPrefix(absPrefix)
+	if err := restructureProtonPrefix(absPrefix); err != nil {
+		return err
+	}
+
+	fmt.Println("-> Prefix created. Launching file explorer for application installation...")
+
+	// Create a temporary config to launch explorer.exe instead of the main game executable.
+	// This allows the user to immediately install their game into the new prefix.
+	explorerCfg := appCfg
+	explorerCfg.Executable = "drive_c/windows/explorer.exe"
+
+	// RunInContainer is used here as it provides the most compatible environment.
+	// This requires 'runtime_version' to be set in the config.
+	return RunInContainer(prefixPath, explorerCfg, globalCfg, debug)
 }
 
 // RunDirectly launches the application using the 'wine64' or 'wine' binary from the Proton distribution.
@@ -220,7 +232,7 @@ func buildProtonEnv(absPrefix, protonBasePath string, appCfg config.App, vinfo c
 	env = append(env, "STEAM_COMPAT_SHADER_PATH="+filepath.Join(absPrefix, "shadercache"))
 	env = append(env, "PROTON_VERB=waitforexitandrun")
 
-	// Set UMU_ID for compatibility with patched Proton scripts like CachyOS.
+	// Set UMU_ID for compatibility with patched Proton scripts.
 	// This signals that we are a third-party launcher.
 	var umuID string
 	if appCfg.SteamAppID != "" && appCfg.SteamAppID != "0" {

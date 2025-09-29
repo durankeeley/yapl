@@ -49,7 +49,7 @@ func (a *App) Setup() error {
 	if err := dependency.EnsureRuntime(a.AppConfig, a.GlobalConfig); err != nil {
 		return err
 	}
-	if err := command.InitializePrefix(a.PrefixPath, a.AppConfig, a.GlobalConfig); err != nil {
+	if err := command.InitializePrefix(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.DebugMode); err != nil {
 		return err
 	}
 	if a.AppConfig.Dependencies.DXVKMode == "custom" {
@@ -77,7 +77,7 @@ func (a *App) Run() error {
 	if err := dependency.EnsureRuntime(a.AppConfig, a.GlobalConfig); err != nil {
 		return err
 	}
-	if err := command.InitializePrefix(a.PrefixPath, a.AppConfig, a.GlobalConfig); err != nil {
+	if err := command.InitializePrefix(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.DebugMode); err != nil {
 		return err
 	}
 
