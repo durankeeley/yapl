@@ -15,7 +15,7 @@ cd yapl
 
 ### Install Dependencies
 
-The project uses Go Modules[cite: 1]. Dependencies will be fetched automatically on the first build. To fetch them manually:
+The project uses Go Modules. Dependencies will be fetched automatically on the first build. To fetch them manually:
 
 ```bash
 go mod tidy
@@ -64,7 +64,7 @@ The general flow of the application is as follows:
   * **Purpose**: To ensure all required tools (Proton, DXVK, Steam Runtime, etc.) are downloaded and available in the shared directories.
   * **Key Functions**:
       * `EnsureAll()`: The main entrypoint for this package. It checks all dependencies listed in the app's config and triggers downloads if necessary.
-      * `EnsureRuntime()`: Specifically handles the logic for downloading, extracting, and checking for updates to the Steam Linux Runtime[cite: 2].
+      * `EnsureRuntime()`: Specifically handles the logic for downloading, extracting, and checking for updates to the Steam Linux Runtime.
       * `ensureProton()`: Manages the acquisition of Proton, handling both remote URLs and local user-provided paths.
       * `InstallCustomComponents()`: Copies specific DLLs (like `d3d11.dll`) into the Wine prefix for advanced override configurations.
 
