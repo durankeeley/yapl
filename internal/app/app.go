@@ -46,7 +46,10 @@ func (a *App) Setup() error {
 	if err := dependency.EnsureAll(a.AppConfig, a.ForceUpgrade, a.GlobalConfig); err != nil {
 		return err
 	}
-	if err := command.InitializePrefix(a.PrefixPath, a.AppConfig, a.GlobalConfig); err != nil {
+	if err := dependency.EnsureRuntime(a.AppConfig, a.GlobalConfig); err != nil {
+		return err
+	}
+	if err := command.InitializePrefix(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.DebugMode); err != nil {
 		return err
 	}
 	if a.AppConfig.Dependencies.DXVKMode == "custom" {
@@ -71,18 +74,27 @@ func (a *App) Run() error {
 	if err := dependency.EnsureAll(a.AppConfig, a.ForceUpgrade, a.GlobalConfig); err != nil {
 		return err
 	}
-	if err := command.InitializePrefix(a.PrefixPath, a.AppConfig, a.GlobalConfig); err != nil {
+	if err := dependency.EnsureRuntime(a.AppConfig, a.GlobalConfig); err != nil {
+		return err
+	}
+	if err := command.InitializePrefix(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.DebugMode); err != nil {
 		return err
 	}
 
-	launchMethod := a.AppConfig.LaunchMethod
-	if launchMethod == "" {
-		launchMethod = "direct" // Default launch method
+	method := a.AppConfig.LaunchMethod
+	if method == "" {
+		method = "container"
 	}
 
-	fmt.Printf("-> Using launch method from config: %s\n", launchMethod)
-	if launchMethod == "umu" {
+	fmt.Printf("-> Using launch method from config: %s\n", method)
+	switch method {
+	case "direct":
+		return command.RunDirectly(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.IsSteamPrefix, a.DebugMode)
+	case "container":
+		return command.RunInContainer(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.DebugMode)
+	case "umu":
 		return command.RunWithUMU(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.DebugMode)
+	default:
+		return fmt.Errorf("unknown launch_method: '%s'. Please use 'direct', 'container', or 'umu'", method)
 	}
-	return command.RunDirectly(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.IsSteamPrefix, a.DebugMode)
 }

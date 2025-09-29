@@ -13,118 +13,210 @@ import (
 	"yapl/internal/fs"
 )
 
-// InitializePrefix creates and sets up a new Wine prefix if it doesn't already exist.
-func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Global) error {
+// InitializePrefix creates and sets up a new Wine prefix.
+// It will always use the 'proton' script for initialization as it's the most reliable method.
+func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Global, debug bool) error {
 	absPrefix := fs.MustGetAbsolutePath(prefixPath)
 	if err := fs.MustCreateDirectory(absPrefix); err != nil {
 		return err
 	}
+	// If the prefix already exists (system.reg is present), do nothing.
 	if _, err := os.Stat(filepath.Join(absPrefix, "system.reg")); err == nil {
 		return nil
 	}
 
-	fmt.Println("-> Initializing Wine prefix...")
-	protonExecutable := getProtonExecutablePath(appCfg, globalCfg)
-	protonVersionInfo := getProtonInfo(appCfg, globalCfg)
-	protonBasePath := getProtonPath(appCfg.ProtonVersion, protonVersionInfo)
-	binName := getProtonBinName(appCfg)
+	fmt.Println("-> Initializing Wine prefix using the proton script...")
 
-	var cmd *exec.Cmd
-	if binName == "proton" {
-		fmt.Println("-> Using 'proton run cmd' for initialization.")
-		cmd = exec.Command(protonExecutable, "run", "cmd", "/c", "echo", "Initializing...")
-		cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, false)
-	} else {
-		fmt.Printf("-> Using 'wineboot' with '%s' for initialization.\n", binName)
-		cmd = exec.Command(protonExecutable, "wineboot", "-u")
-		cmd.Env = os.Environ()
-		cmd.Env = append(cmd.Env, "WINEPREFIX="+absPrefix)
-		cmd.Env = append(cmd.Env, "WINEARCH="+getWineArch(appCfg))
+	protonVersionInfo := getProtonInfo(appCfg, globalCfg)
+	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo))
+	protonScriptPath := getProtonScriptPath(appCfg, globalCfg)
+
+	if _, err := os.Stat(protonScriptPath); os.IsNotExist(err) {
+		return fmt.Errorf("could not find 'proton' script at %s. Cannot initialize prefix", protonScriptPath)
 	}
+
+	cmd := exec.Command(protonScriptPath, "run", "cmd", "/c", "echo", "Initializing prefix...")
+	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, false)
 
 	if err := cmd.Run(); err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			log.Printf("-> Prefix creation output:\n%s", string(exitError.Stderr))
 		}
-		return fmt.Errorf("prefix initialization failed: %w", err)
+		return fmt.Errorf("prefix initialization with proton script failed: %w", err)
 	}
-	fmt.Println("-> Prefix initialized successfully.")
 
-	if binName == "proton" {
-		return restructureProtonPrefix(absPrefix)
+	// The proton script creates a nested 'pfx' directory, so we need to flatten it.
+	if err := restructureProtonPrefix(absPrefix); err != nil {
+		return err
 	}
-	return nil
+
+	fmt.Println("-> Prefix created. Launching file explorer for application installation...")
+
+	// Create a temporary config to launch explorer.exe instead of the main game executable.
+	// This allows the user to immediately install their game into the new prefix.
+	explorerCfg := appCfg
+	explorerCfg.Executable = "drive_c/windows/explorer.exe"
+
+	// RunInContainer is used here as it provides the most compatible environment.
+	// This requires 'runtime_version' to be set in the config.
+	return RunInContainer(prefixPath, explorerCfg, globalCfg, debug)
 }
 
-// RunDirectly launches the application using the configured Proton/Wine binary.
+// RunDirectly launches the application using the 'wine64' or 'wine' binary from the Proton distribution.
+// This is a lightweight method that bypasses the Proton script and the Steam Runtime.
 func RunDirectly(prefixPath string, appCfg config.App, globalCfg config.Global, isSteam, debug bool) error {
-	fmt.Println("-> Running directly...")
-	protonExecutable, err := filepath.Abs(getProtonExecutablePath(appCfg, globalCfg))
-	if err != nil {
-		return fmt.Errorf("could not get absolute path for proton executable: %w", err)
+	if isSteam {
+		return errors.New("--steam flag is not compatible with 'direct' launch_method. Use 'container' instead")
 	}
+
+	fmt.Println("-> Running in direct mode (using wine/wine64)...")
+
 	absPrefix := fs.MustGetAbsolutePath(prefixPath)
 	protonVersionInfo := getProtonInfo(appCfg, globalCfg)
 	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo))
-	binName := getProtonBinName(appCfg)
+	wineArch := getWineArch(appCfg)
 
-	var cmd *exec.Cmd
-	env := buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
+	// Find the wine executable based on the configured architecture.
+	wineExecutablePath, err := getWineExecutablePath(protonBasePath, wineArch)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("-> Found wine executable for %s: %s\n", wineArch, wineExecutablePath)
 
-	if isSteam {
-		if binName != "proton" {
-			return errors.New("--steam flag requires 'proton' as the proton_bin_name")
-		}
-		fmt.Println("-> Launching isolated Steam client...")
-		steamExePath := filepath.Join(protonBasePath, "files", "share", "steam", "steam.exe")
-		if _, err := os.Stat(steamExePath); os.IsNotExist(err) {
-			return fmt.Errorf("could not find Proton's internal steam.exe, expected at: %s", steamExePath)
-		}
-		cmd = exec.Command("sh", "-c", fmt.Sprintf(`"%s" run "%s"`, protonExecutable, steamExePath))
-	} else {
-		if appCfg.SteamAppID != "" && appCfg.SteamAppID != "0" {
-			fullExePath := filepath.Join(absPrefix, appCfg.Executable)
-			exeDir := filepath.Dir(fullExePath)
-			appIDPath := filepath.Join(exeDir, "steam_appid.txt")
-			if err := os.WriteFile(appIDPath, []byte(appCfg.SteamAppID), 0644); err != nil {
-				log.Printf("⚠️  Warning: Failed to write steam_appid.txt: %v", err)
-			}
-		}
-
-		if binName == "proton" {
-			fmt.Println("-> Using Proton 'run' command.")
-			fullExePath := filepath.Join(absPrefix, appCfg.Executable)
-			cmd = exec.Command("sh", "-c", fmt.Sprintf(`"%s" run "%s"`, protonExecutable, fullExePath))
-		} else {
-			fmt.Printf("-> Using direct Wine-like execution ('%s').\n", binName)
-			fullExePath := filepath.Join(absPrefix, appCfg.Executable)
-			cmd = exec.Command(protonExecutable, fullExePath)
+	if appCfg.SteamAppID != "" && appCfg.SteamAppID != "0" {
+		fullExePath := filepath.Join(absPrefix, appCfg.Executable)
+		exeDir := filepath.Dir(fullExePath)
+		appIDPath := filepath.Join(exeDir, "steam_appid.txt")
+		if err := os.WriteFile(appIDPath, []byte(appCfg.SteamAppID), 0644); err != nil {
+			log.Printf("⚠️  Warning: Failed to write steam_appid.txt: %v", err)
 		}
 	}
 
-	cmd.Env = env
+	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
+	args := []string{fullExePath}
+	args = append(args, appCfg.UMUOptions.LaunchArgs...)
+
+	cmd := exec.Command(wineExecutablePath, args...)
+	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
+
+	return executeCommand(cmd)
+}
+
+// RunInContainer launches the application inside the self-managed Steam Linux Runtime container.
+func RunInContainer(prefixPath string, appCfg config.App, globalCfg config.Global, debug bool) error {
+	if appCfg.RuntimeVersion == "" {
+		return errors.New("launch_method 'container' requires 'runtime_version' to be set in game.json")
+	}
+
+	fmt.Println("-> Running in container mode...")
+	protonVersionInfo := getProtonInfo(appCfg, globalCfg)
+	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo))
+	absPrefix := fs.MustGetAbsolutePath(prefixPath)
+
+	runtimeDir := filepath.Join("dependencies", "runtime", appCfg.RuntimeVersion)
+	entryPointPath := filepath.Join(runtimeDir, "yapl-entry-point")
+	shimPath := filepath.Join(runtimeDir, "yapl-shim")
+	protonScriptPath := getProtonScriptPath(appCfg, globalCfg)
+
+	if _, err := os.Stat(protonScriptPath); os.IsNotExist(err) {
+		return fmt.Errorf("could not find 'proton' script. The 'container' method requires a full Proton build (like GE-Proton), not a Wine-only build")
+	}
+
+	if appCfg.SteamAppID != "" && appCfg.SteamAppID != "0" {
+		fullExePath := filepath.Join(absPrefix, appCfg.Executable)
+		exeDir := filepath.Dir(fullExePath)
+		appIDPath := filepath.Join(exeDir, "steam_appid.txt")
+		if err := os.WriteFile(appIDPath, []byte(appCfg.SteamAppID), 0644); err != nil {
+			log.Printf("⚠️  Warning: Failed to write steam_appid.txt: %v", err)
+		}
+	}
+
+	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
+	protonVerb := "waitforexitandrun"
+
+	args := []string{
+		"--verb=" + protonVerb,
+		"--",
+		shimPath,
+		protonScriptPath,
+		protonVerb,
+		fullExePath,
+	}
+	args = append(args, appCfg.UMUOptions.LaunchArgs...)
+
+	cmd := exec.Command(entryPointPath, args...)
+	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
+
 	return executeCommand(cmd)
 }
 
 // RunWithUMU launches the application using the umu-launcher helper.
 func RunWithUMU(prefixPath string, appCfg config.App, globalCfg config.Global, debug bool) error {
 	fmt.Println("-> Running with umu-launcher...")
-	// ... (rest of the function is unchanged)
-	return nil // Placeholder
+
+	umuRunPath := "umu-run"
+	if !appCfg.UMUOptions.UseSystemBinary {
+		ver := appCfg.UMUOptions.Version
+		if ver == "" {
+			return errors.New("'umu_options.version' must be set")
+		}
+		vinfo, ok := globalCfg.DependencyVersions["umu-launcher"][ver]
+		if !ok {
+			return fmt.Errorf("umu-launcher version '%s' not defined in runner.json", ver)
+		}
+		umuRunPath = filepath.Join("dependencies", "umu-launcher", ver, vinfo.BinPath, "umu-run")
+	}
+
+	absPrefix := fs.MustGetAbsolutePath(prefixPath)
+	protonVersionInfo := getProtonInfo(appCfg, globalCfg)
+	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo))
+	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
+
+	args := append([]string{fullExePath}, appCfg.UMUOptions.LaunchArgs...)
+	cmd := exec.Command(umuRunPath, args...)
+
+	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
+	cmd.Env = append(cmd.Env, "PROTONPATH="+protonBasePath)
+	if appCfg.UMUOptions.GameID != "" {
+		cmd.Env = append(cmd.Env, "GAMEID="+appCfg.UMUOptions.GameID)
+	}
+	if appCfg.UMUOptions.Store != "" {
+		cmd.Env = append(cmd.Env, "STORE="+appCfg.UMUOptions.Store)
+	}
+
+	return executeCommand(cmd)
 }
 
+// buildProtonEnv constructs the necessary environment for Proton/Wine to run.
 func buildProtonEnv(absPrefix, protonBasePath string, appCfg config.App, vinfo config.VersionInfo, debug bool) []string {
 	clientInstallPath := filepath.Dir(filepath.Join(absPrefix, appCfg.Executable))
 	env := os.Environ()
 
-	existingLdPath := os.Getenv("LD_LIBRARY_PATH")
-	protonLibs32 := filepath.Join(protonBasePath, "files", "lib")
-	protonLibs64 := filepath.Join(protonBasePath, "files", "lib64")
-	newPaths := []string{protonLibs64, protonLibs32}
-	if existingLdPath != "" {
-		newPaths = append(newPaths, existingLdPath)
+	var newLdPaths []string
+	for _, component := range vinfo.LDLibraryPathComponents {
+		fullPath := filepath.Join(protonBasePath, component)
+		if _, err := os.Stat(fullPath); err == nil {
+			newLdPaths = append(newLdPaths, fullPath)
+		}
 	}
-	env = append(env, "LD_LIBRARY_PATH="+strings.Join(newPaths, ":"))
+
+	var newWineDllPaths []string
+	for _, component := range vinfo.WineDllPathComponents {
+		fullPath := filepath.Join(protonBasePath, component)
+		if _, err := os.Stat(fullPath); err == nil {
+			newWineDllPaths = append(newWineDllPaths, fullPath)
+		}
+	}
+
+	if existingLdPath := os.Getenv("LD_LIBRARY_PATH"); existingLdPath != "" {
+		newLdPaths = append(newLdPaths, existingLdPath)
+	}
+	if len(newLdPaths) > 0 {
+		env = append(env, "LD_LIBRARY_PATH="+strings.Join(newLdPaths, ":"))
+	}
+	if len(newWineDllPaths) > 0 {
+		env = append(env, "WINEDLLPATH="+strings.Join(newWineDllPaths, ":"))
+	}
 
 	existingPath := os.Getenv("PATH")
 	protonBin := filepath.Join(protonBasePath, "bin")
@@ -140,26 +232,26 @@ func buildProtonEnv(absPrefix, protonBasePath string, appCfg config.App, vinfo c
 	env = append(env, "STEAM_COMPAT_SHADER_PATH="+filepath.Join(absPrefix, "shadercache"))
 	env = append(env, "PROTON_VERB=waitforexitandrun")
 
+	// Set UMU_ID for compatibility with patched Proton scripts.
+	// This signals that we are a third-party launcher.
+	var umuID string
 	if appCfg.SteamAppID != "" && appCfg.SteamAppID != "0" {
 		appID := appCfg.SteamAppID
 		env = append(env, "STEAM_COMPAT_APP_ID="+appID)
 		env = append(env, "SteamAppId="+appID)
 		env = append(env, "SteamGameId="+appID)
+		umuID = appID
+	} else {
+		// Use a default ID for non-steam games to ensure the safe launch path is taken.
+		umuID = "yapl-default"
 	}
+	env = append(env, "UMU_ID="+umuID)
 
 	for k, v := range appCfg.EnvironmentVars {
 		env = append(env, k+"="+v)
 	}
 	if overrideStr := buildDllOverridesString(appCfg.DLLOverrides); overrideStr != "" {
 		env = append(env, "WINEDLLOVERRIDES="+overrideStr)
-	}
-
-	if len(vinfo.WineDllPathComponents) > 0 {
-		var dllPaths []string
-		for _, component := range vinfo.WineDllPathComponents {
-			dllPaths = append(dllPaths, filepath.Join(protonBasePath, component))
-		}
-		env = append(env, "WINEDLLPATH="+strings.Join(dllPaths, ":"))
 	}
 
 	if debug {
@@ -171,7 +263,7 @@ func buildProtonEnv(absPrefix, protonBasePath string, appCfg config.App, vinfo c
 }
 
 // --- Private Helpers ---
-// ... (all private helper functions from the previous version go here)
+
 func executeCommand(cmd *exec.Cmd) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -237,18 +329,40 @@ func getProtonPath(version string, vinfo config.VersionInfo) string {
 	return filepath.Join("proton", version)
 }
 
-func getProtonBinName(appCfg config.App) string {
-	if appCfg.ProtonBinName == "" {
-		return "proton"
-	}
-	return appCfg.ProtonBinName
-}
-
-func getProtonExecutablePath(appCfg config.App, globalCfg config.Global) string {
+// getProtonScriptPath returns the absolute path to the main 'proton' script.
+func getProtonScriptPath(appCfg config.App, globalCfg config.Global) string {
 	vinfo := getProtonInfo(appCfg, globalCfg)
 	basePath := getProtonPath(appCfg.ProtonVersion, vinfo)
-	binName := getProtonBinName(appCfg)
-	return filepath.Join(basePath, binName)
+	return filepath.Join(basePath, "proton")
+}
+
+// getWineExecutablePath finds the correct wine binary within a Proton distribution based on architecture.
+func getWineExecutablePath(protonBasePath string, wineArch string) (string, error) {
+	var binariesToSearch []string
+	if wineArch == "win32" {
+		binariesToSearch = []string{"wine"}
+	} else {
+		// Default to win64, but also check for 'wine' as a fallback.
+		binariesToSearch = []string{"wine64", "wine"}
+	}
+
+	// Wine builds can place the binaries in different locations. Check the most common ones.
+	possibleBasePaths := []string{
+		filepath.Join(protonBasePath, "files", "bin"),
+		filepath.Join(protonBasePath, "dist", "bin"),
+		filepath.Join(protonBasePath, "bin"),
+	}
+
+	for _, binName := range binariesToSearch {
+		for _, basePath := range possibleBasePaths {
+			fullPath := filepath.Join(basePath, binName)
+			if _, err := os.Stat(fullPath); err == nil {
+				return filepath.Abs(fullPath)
+			}
+		}
+	}
+
+	return "", fmt.Errorf("could not find a suitable wine/wine64 executable in %s for architecture %s", protonBasePath, wineArch)
 }
 
 func getWineArch(appCfg config.App) string {
