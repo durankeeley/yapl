@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"yapl/internal/archive"
 	"yapl/internal/config"
@@ -37,31 +38,34 @@ func ensureProton(appCfg config.App, forceUpgrade bool, globalCfg config.Global)
 		return fmt.Errorf("proton version '%s' not defined in runner.json", appCfg.ProtonVersion)
 	}
 
+	protonPath := filepath.Join("proton", appCfg.ProtonVersion)
 	if vinfo.Path != "" {
 		if _, err := os.Stat(vinfo.Path); os.IsNotExist(err) {
 			return fmt.Errorf("custom proton path does not exist: %s", vinfo.Path)
 		}
 		fmt.Println("-> Using local Proton version.")
-		return nil
-	}
-
-	if vinfo.URL == "" {
-		return fmt.Errorf("proton version '%s' has no URL in runner.json", appCfg.ProtonVersion)
-	}
-
-	protonPath := filepath.Join("proton", appCfg.ProtonVersion)
-	if !fs.DirExistsAndIsNotEmpty(protonPath) || forceUpgrade {
-		fmt.Printf("-> Acquiring Proton '%s'...\n", appCfg.ProtonVersion)
-		if forceUpgrade {
-			if err := os.RemoveAll(protonPath); err != nil {
-				return fmt.Errorf("failed to remove existing proton path: %w", err)
+	} else {
+		if vinfo.URL == "" {
+			return fmt.Errorf("proton version '%s' has no URL in runner.json", appCfg.ProtonVersion)
+		}
+		if !fs.DirExistsAndIsNotEmpty(protonPath) || forceUpgrade {
+			fmt.Printf("-> Acquiring Proton '%s'...\n", appCfg.ProtonVersion)
+			if forceUpgrade {
+				if err := os.RemoveAll(protonPath); err != nil {
+					return fmt.Errorf("failed to remove existing proton path: %w", err)
+				}
+			}
+			ar := &archive.Archive{Source: vinfo.URL}
+			if err := ar.Extract(protonPath); err != nil {
+				return fmt.Errorf("failed to acquire proton: %w", err)
 			}
 		}
-		ar := &archive.Archive{Source: vinfo.URL}
-		if err := ar.Extract(protonPath); err != nil {
-			return fmt.Errorf("failed to acquire proton: %w", err)
-		}
 	}
+
+	if appCfg.WineArch == "win32" {
+		return patchProtonForWin32(appCfg.ProtonVersion)
+	}
+
 	return nil
 }
 
@@ -134,4 +138,35 @@ func getInfo(name, version string, globalCfg config.Global) (config.VersionInfo,
 		return config.VersionInfo{}, fmt.Errorf("version '%s' for '%s' not defined in runner.json", version, name)
 	}
 	return vinfo, nil
+}
+
+func patchProtonForWin32(version string) error {
+	originalPath := filepath.Join("proton", version)
+	patchedPath := filepath.Join("proton", version+"-win32")
+
+	if fs.DirExistsAndIsNotEmpty(patchedPath) {
+		fmt.Println("-> Found existing patched Proton for win32.")
+		return nil
+	}
+
+	fmt.Printf("-> Creating patched Proton version for win32 at '%s'...\n", patchedPath)
+
+	if err := fs.CopyDir(originalPath, patchedPath); err != nil {
+		return fmt.Errorf("failed to copy proton directory for win32 patch: %w", err)
+	}
+
+	protonScriptPath := filepath.Join(patchedPath, "proton")
+	scriptBytes, err := os.ReadFile(protonScriptPath)
+	if err != nil {
+		return fmt.Errorf("could not read proton script for patching: %w", err)
+	}
+
+	modifiedScript := strings.ReplaceAll(string(scriptBytes), "wine64", "wine")
+
+	if err := os.WriteFile(protonScriptPath, []byte(modifiedScript), 0755); err != nil {
+		return fmt.Errorf("could not write patched proton script: %w", err)
+	}
+
+	fmt.Println("✅ Proton patched for win32.")
+	return nil
 }

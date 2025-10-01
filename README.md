@@ -10,7 +10,7 @@ YAPL solves the classic "it works on my machine" problem by treating your entire
 
 YAPL keeps things simple and organized.
 
-  * **A Single Binary**: The whole tool is a single `yapl` file compiled from Go[cite: 1]. It has no external dependencies, so it runs on pretty much any modern Linux distribution.
+  * **A Single Binary**: The whole tool is a single `yapl` file compiled from Go. It has no external dependencies, so it runs on pretty much any modern Linux distribution.
   * **Shared Tools**: All your downloaded tools (like Proton, DXVK, and the Steam Runtime) are stored in one central place and cleverly reused across all your games and apps.
       * `./proton/`: Stores different Proton builds.
       * `./dependencies/`: Stores shared dependencies like `DXVK`, `VKD3D`, `umu-launcher`, and the Steam Linux Runtime.
