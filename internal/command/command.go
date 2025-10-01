@@ -20,45 +20,74 @@ func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Glo
 	if err := fs.MustCreateDirectory(absPrefix); err != nil {
 		return err
 	}
-	// If the prefix already exists (system.reg is present), do nothing.
 	if _, err := os.Stat(filepath.Join(absPrefix, "system.reg")); err == nil {
-		return nil
+		return nil // Prefix already exists
 	}
 
-	fmt.Println("-> Initializing Wine prefix using the proton script...")
-
+	wineArch := getWineArch(appCfg)
 	protonVersionInfo := getProtonInfo(appCfg, globalCfg)
-	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo))
-	protonScriptPath := getProtonScriptPath(appCfg, globalCfg)
+	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo, wineArch))
 
-	if _, err := os.Stat(protonScriptPath); os.IsNotExist(err) {
-		return fmt.Errorf("could not find 'proton' script at %s. Cannot initialize prefix", protonScriptPath)
+	// Handle 32-bit prefixes with a special direct method
+	if wineArch == "win32" {
+		fmt.Println("-> Initializing win32 Wine prefix directly...")
+		wineExecutablePath, err := getWineExecutablePath(protonBasePath, wineArch)
+		if err != nil {
+			return err
+		}
+
+		// Build a minimal environment just for prefix creation
+		env := os.Environ()
+		env = append(env, "WINEPREFIX="+absPrefix)
+		env = append(env, "WINEARCH="+wineArch)
+
+		cmd := exec.Command(wineExecutablePath, "winecfg")
+		cmd.Env = env
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("win32 prefix creation with winecfg failed: %w", err)
+		}
+
+		// Proton crashes if this directory doesn't exist in a 32-bit prefix
+		syswow64Path := filepath.Join(absPrefix, "drive_c", "windows", "syswow64")
+		if err := os.MkdirAll(syswow64Path, 0755); err != nil {
+			return fmt.Errorf("failed to create syswow64 directory: %w", err)
+		}
+
+		// Create the pfx symlink for consistency
+		if err := os.Symlink(".", filepath.Join(absPrefix, "pfx")); err != nil {
+			return fmt.Errorf("failed to create pfx symlink: %w", err)
+		}
+
+		fmt.Println("-> Prefix created. Launching file explorer for application installation...")
+		explorerCfg := appCfg
+		explorerCfg.Executable = "drive_c/windows/explorer.exe"
+		// Use RunDirectly for win32 setup
+		return RunDirectly(prefixPath, explorerCfg, globalCfg, false, debug)
 	}
 
-	cmd := exec.Command(protonScriptPath, "run", "cmd", "/c", "echo", "Initializing prefix...")
-	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, false)
+	// Default 64-bit prefix initialization using the proton script
+	fmt.Println("-> Initializing Wine prefix using the proton script...")
+	protonScriptPath := getProtonScriptPath(appCfg, globalCfg, wineArch)
+	if _, err := os.Stat(protonScriptPath); os.IsNotExist(err) {
+		return fmt.Errorf("could not find 'proton' script at %s", protonScriptPath)
+	}
+	initCmd := exec.Command(protonScriptPath, "run", "cmd", "/c", "echo", "Initializing prefix...")
+	initCmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, false)
 
-	if err := cmd.Run(); err != nil {
+	if err := initCmd.Run(); err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			log.Printf("-> Prefix creation output:\n%s", string(exitError.Stderr))
 		}
 		return fmt.Errorf("prefix initialization with proton script failed: %w", err)
 	}
 
-	// The proton script creates a nested 'pfx' directory, so we need to flatten it.
 	if err := restructureProtonPrefix(absPrefix); err != nil {
 		return err
 	}
 
 	fmt.Println("-> Prefix created. Launching file explorer for application installation...")
-
-	// Create a temporary config to launch explorer.exe instead of the main game executable.
-	// This allows the user to immediately install their game into the new prefix.
 	explorerCfg := appCfg
 	explorerCfg.Executable = "drive_c/windows/explorer.exe"
-
-	// RunInContainer is used here as it provides the most compatible environment.
-	// This requires 'runtime_version' to be set in the config.
 	return RunInContainer(prefixPath, explorerCfg, globalCfg, debug)
 }
 
@@ -73,10 +102,9 @@ func RunDirectly(prefixPath string, appCfg config.App, globalCfg config.Global, 
 
 	absPrefix := fs.MustGetAbsolutePath(prefixPath)
 	protonVersionInfo := getProtonInfo(appCfg, globalCfg)
-	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo))
 	wineArch := getWineArch(appCfg)
+	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo, wineArch))
 
-	// Find the wine executable based on the configured architecture.
 	wineExecutablePath, err := getWineExecutablePath(protonBasePath, wineArch)
 	if err != nil {
 		return err
@@ -110,13 +138,14 @@ func RunInContainer(prefixPath string, appCfg config.App, globalCfg config.Globa
 
 	fmt.Println("-> Running in container mode...")
 	protonVersionInfo := getProtonInfo(appCfg, globalCfg)
-	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo))
+	wineArch := getWineArch(appCfg)
+	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo, wineArch))
 	absPrefix := fs.MustGetAbsolutePath(prefixPath)
 
 	runtimeDir := filepath.Join("dependencies", "runtime", appCfg.RuntimeVersion)
 	entryPointPath := filepath.Join(runtimeDir, "yapl-entry-point")
 	shimPath := filepath.Join(runtimeDir, "yapl-shim")
-	protonScriptPath := getProtonScriptPath(appCfg, globalCfg)
+	protonScriptPath := getProtonScriptPath(appCfg, globalCfg, wineArch)
 
 	if _, err := os.Stat(protonScriptPath); os.IsNotExist(err) {
 		return fmt.Errorf("could not find 'proton' script. The 'container' method requires a full Proton build (like GE-Proton), not a Wine-only build")
@@ -169,7 +198,8 @@ func RunWithUMU(prefixPath string, appCfg config.App, globalCfg config.Global, d
 
 	absPrefix := fs.MustGetAbsolutePath(prefixPath)
 	protonVersionInfo := getProtonInfo(appCfg, globalCfg)
-	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo))
+	wineArch := getWineArch(appCfg)
+	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo, wineArch))
 	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
 
 	args := append([]string{fullExePath}, appCfg.UMUOptions.LaunchArgs...)
@@ -322,17 +352,21 @@ func getProtonInfo(appCfg config.App, globalCfg config.Global) config.VersionInf
 	return vinfo
 }
 
-func getProtonPath(version string, vinfo config.VersionInfo) string {
+func getProtonPath(version string, vinfo config.VersionInfo, wineArch string) string {
 	if vinfo.Path != "" {
 		return vinfo.Path
+	}
+	if wineArch == "win32" {
+		return filepath.Join("proton", version+"-win32")
 	}
 	return filepath.Join("proton", version)
 }
 
 // getProtonScriptPath returns the absolute path to the main 'proton' script.
-func getProtonScriptPath(appCfg config.App, globalCfg config.Global) string {
+func getProtonScriptPath(appCfg config.App, globalCfg config.Global, wineArch string) string {
 	vinfo := getProtonInfo(appCfg, globalCfg)
-	basePath := getProtonPath(appCfg.ProtonVersion, vinfo)
+	// Make sure we get the path from the correct (potentially patched) directory
+	basePath := getProtonPath(appCfg.ProtonVersion, vinfo, wineArch)
 	return filepath.Join(basePath, "proton")
 }
 
