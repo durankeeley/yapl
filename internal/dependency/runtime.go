@@ -53,7 +53,7 @@ func EnsureRuntime(appCfg config.App, globalCfg config.Global) error {
 
 	fmt.Println("-> Steam Linux Runtime needs to be installed or updated.")
 	ar := &archive.Archive{Source: runtimeInfo.URL}
-	if err := ar.Extract(runtimeDir); err != nil {
+	if err := ar.Extract(runtimeDir, true); err != nil {
 		fmt.Printf("❌ Runtime installation failed: %v. Cleaning up...\n", err)
 		os.RemoveAll(runtimeDir)
 		return err

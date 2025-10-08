@@ -56,7 +56,7 @@ func ensureProton(appCfg config.App, forceUpgrade bool, globalCfg config.Global)
 				}
 			}
 			ar := &archive.Archive{Source: vinfo.URL}
-			if err := ar.Extract(protonPath); err != nil {
+			if err := ar.Extract(protonPath, true); err != nil {
 				return fmt.Errorf("failed to acquire proton: %w", err)
 			}
 		}
@@ -84,7 +84,7 @@ func ensure(name, version string, globalCfg config.Global) error {
 	}
 	fmt.Printf("-> Acquiring %s '%s'...\n", name, version)
 	ar := &archive.Archive{Source: vinfo.URL}
-	if err := ar.Extract(depPath); err != nil {
+	if err := ar.Extract(depPath, true); err != nil {
 		return fmt.Errorf("failed to acquire dependency '%s': %w", name, err)
 	}
 	return nil

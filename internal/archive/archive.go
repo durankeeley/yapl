@@ -22,7 +22,7 @@ type Archive struct {
 }
 
 // Extract unpacks the archive to a destination path.
-func (a *Archive) Extract(destPath string) error {
+func (a *Archive) Extract(destPath string, stripTopLevelDir bool) error {
 	if a.Source == "" {
 		return errors.New("archive source cannot be empty")
 	}
@@ -37,7 +37,8 @@ func (a *Archive) Extract(destPath string) error {
 	if err != nil {
 		return err
 	}
-	return extractTar(decompressedReader, destPath)
+	// **FIX:** Pass the stripTopLevelDir boolean to the extractTar function.
+	return extractTar(decompressedReader, destPath, stripTopLevelDir)
 }
 
 // Package creates a new compressed bundle from a source directory.
@@ -82,7 +83,7 @@ func Unpackage(targetDir string, archivePaths []string) error {
 		}
 
 		ar := &Archive{Source: archivePath}
-		if err := ar.Extract(destPath); err != nil {
+		if err := ar.Extract(destPath, false); err != nil {
 			log.Printf("❌ Failed to unpackage '%s': %v", archivePath, err)
 		} else {
 			fmt.Printf("✅ Successfully unpackaged to '%s'\n", destPath)
@@ -124,23 +125,35 @@ func getDecompressedReader(r io.Reader, sourceFilename string) (io.Reader, error
 	}
 }
 
-func extractTar(r io.Reader, destPath string) error {
+func extractTar(r io.Reader, destPath string, stripTopLevelDir bool) error {
 	tr := tar.NewReader(r)
 	fmt.Println(" Extracting archive...")
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
-			return nil
+			return nil // End of archive
 		}
 		if err != nil {
 			return fmt.Errorf("reading tar: %w", err)
 		}
-		parts := strings.Split(hdr.Name, string(filepath.Separator))
-		if len(parts) <= 1 {
-			continue
+
+		var target string
+		if stripTopLevelDir {
+			parts := strings.Split(hdr.Name, string(filepath.Separator))
+			if len(parts) <= 1 {
+				continue // Skip top-level directory or files at root
+			}
+			relativePath := strings.Join(parts[1:], string(filepath.Separator))
+			target = filepath.Join(destPath, relativePath)
+		} else {
+			target = filepath.Join(destPath, hdr.Name)
 		}
-		relativePath := strings.Join(parts[1:], string(filepath.Separator))
-		target := filepath.Join(destPath, relativePath)
+
+		// **FIX:** Clean the path and add a security check to prevent path traversal.
+		target = filepath.Clean(target)
+		if !strings.HasPrefix(target, destPath) {
+			return fmt.Errorf("archive contains invalid path: %s", hdr.Name)
+		}
 
 		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 			return fmt.Errorf("mkdirAll failed for %s: %w", filepath.Dir(target), err)
