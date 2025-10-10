@@ -62,7 +62,7 @@ func ensureProton(appCfg config.App, forceUpgrade bool, globalCfg config.Global)
 		}
 	}
 
-	if appCfg.WineArch == "win32" {
+	if appCfg.WineArch == "win32" && appCfg.ProtonVersion != "system" {
 		return patchProtonForWin32(appCfg.ProtonVersion)
 	}
 

@@ -67,27 +67,34 @@ func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Glo
 
 	// Default 64-bit prefix initialization using the proton script
 	fmt.Println("-> Initializing Wine prefix using the proton script...")
-	protonScriptPath := getProtonScriptPath(appCfg, globalCfg, wineArch)
-	if _, err := os.Stat(protonScriptPath); os.IsNotExist(err) {
-		return fmt.Errorf("could not find 'proton' script at %s", protonScriptPath)
-	}
-	initCmd := exec.Command(protonScriptPath, "run", "cmd", "/c", "echo", "Initializing prefix...")
-	initCmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, false)
 
-	if err := initCmd.Run(); err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok {
-			log.Printf("-> Prefix creation output:\n%s", string(exitError.Stderr))
+	if appCfg.ProtonVersion != "system" {
+		protonScriptPath := getProtonScriptPath(appCfg, globalCfg, wineArch)
+		if _, err := os.Stat(protonScriptPath); os.IsNotExist(err) {
+			return fmt.Errorf("could not find 'proton' script at %s", protonScriptPath)
 		}
-		return fmt.Errorf("prefix initialization with proton script failed: %w", err)
-	}
+		initCmd := exec.Command(protonScriptPath, "run", "cmd", "/c", "echo", "Initializing prefix...")
+		initCmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, false)
 
-	if err := restructureProtonPrefix(absPrefix); err != nil {
-		return err
-	}
+		if err := initCmd.Run(); err != nil {
+			if exitError, ok := err.(*exec.ExitError); ok {
+				log.Printf("-> Prefix creation output:\n%s", string(exitError.Stderr))
+			}
+			return fmt.Errorf("prefix initialization with proton script failed: %w", err)
+		}
 
+		if err := restructureProtonPrefix(absPrefix); err != nil {
+			return err
+		}
+
+	}
 	fmt.Println("-> Prefix created. Launching file explorer for application installation...")
 	explorerCfg := appCfg
 	explorerCfg.Executable = "drive_c/windows/explorer.exe"
+
+	if appCfg.LaunchMethod == "direct" {
+		return RunDirectly(prefixPath, explorerCfg, globalCfg, false, debug)
+	}
 	return RunInContainer(prefixPath, explorerCfg, globalCfg, debug)
 }
 
