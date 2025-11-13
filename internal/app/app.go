@@ -89,7 +89,7 @@ func (a *App) Run() error {
 	fmt.Printf("-> Using launch method from config: %s\n", method)
 	switch method {
 	case "direct":
-		return command.RunDirectly(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.IsSteamPrefix, a.DebugMode)
+		return command.RunDirectly(a.AppDir, a.AppConfig, a.GlobalConfig, a.IsSteamPrefix, a.DebugMode)
 	case "container":
 		return command.RunInContainer(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.DebugMode)
 	case "umu":

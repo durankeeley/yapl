@@ -67,27 +67,34 @@ func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Glo
 
 	// Default 64-bit prefix initialization using the proton script
 	fmt.Println("-> Initializing Wine prefix using the proton script...")
-	protonScriptPath := getProtonScriptPath(appCfg, globalCfg, wineArch)
-	if _, err := os.Stat(protonScriptPath); os.IsNotExist(err) {
-		return fmt.Errorf("could not find 'proton' script at %s", protonScriptPath)
-	}
-	initCmd := exec.Command(protonScriptPath, "run", "cmd", "/c", "echo", "Initializing prefix...")
-	initCmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, false)
 
-	if err := initCmd.Run(); err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok {
-			log.Printf("-> Prefix creation output:\n%s", string(exitError.Stderr))
+	if appCfg.ProtonVersion != "system" {
+		protonScriptPath := getProtonScriptPath(appCfg, globalCfg, wineArch)
+		if _, err := os.Stat(protonScriptPath); os.IsNotExist(err) {
+			return fmt.Errorf("could not find 'proton' script at %s", protonScriptPath)
 		}
-		return fmt.Errorf("prefix initialization with proton script failed: %w", err)
-	}
+		initCmd := exec.Command(protonScriptPath, "run", "cmd", "/c", "echo", "Initializing prefix...")
+		initCmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, false)
 
-	if err := restructureProtonPrefix(absPrefix); err != nil {
-		return err
-	}
+		if err := initCmd.Run(); err != nil {
+			if exitError, ok := err.(*exec.ExitError); ok {
+				log.Printf("-> Prefix creation output:\n%s", string(exitError.Stderr))
+			}
+			return fmt.Errorf("prefix initialization with proton script failed: %w", err)
+		}
 
+		if err := restructureProtonPrefix(absPrefix); err != nil {
+			return err
+		}
+
+	}
 	fmt.Println("-> Prefix created. Launching file explorer for application installation...")
 	explorerCfg := appCfg
 	explorerCfg.Executable = "drive_c/windows/explorer.exe"
+
+	if appCfg.LaunchMethod == "direct" {
+		return RunDirectly(prefixPath, explorerCfg, globalCfg, false, debug)
+	}
 	return RunInContainer(prefixPath, explorerCfg, globalCfg, debug)
 }
 
@@ -122,7 +129,7 @@ func RunDirectly(prefixPath string, appCfg config.App, globalCfg config.Global, 
 
 	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
 	args := []string{fullExePath}
-	args = append(args, appCfg.UMUOptions.LaunchArgs...)
+	args = append(args, appCfg.LaunchArgs...)
 
 	cmd := exec.Command(wineExecutablePath, args...)
 	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
@@ -171,7 +178,7 @@ func RunInContainer(prefixPath string, appCfg config.App, globalCfg config.Globa
 		protonVerb,
 		fullExePath,
 	}
-	args = append(args, appCfg.UMUOptions.LaunchArgs...)
+	args = append(args, appCfg.LaunchArgs...)
 
 	cmd := exec.Command(entryPointPath, args...)
 	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
@@ -202,7 +209,7 @@ func RunWithUMU(prefixPath string, appCfg config.App, globalCfg config.Global, d
 	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo, wineArch))
 	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
 
-	args := append([]string{fullExePath}, appCfg.UMUOptions.LaunchArgs...)
+	args := append([]string{fullExePath}, append(appCfg.LaunchArgs, appCfg.UMUOptions.LaunchArgs...)...)
 	cmd := exec.Command(umuRunPath, args...)
 
 	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
