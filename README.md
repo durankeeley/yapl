@@ -158,7 +158,10 @@ This is the most lightweight method, ideal for older or less demanding non-Steam
   },
   "environment_vars": {
     "DXVK_HUD": "fps"
-  }
+  },
+  "launch_args": [
+    "fullscrean=true"
+  ]
 }
 ```
 
