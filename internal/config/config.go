@@ -52,6 +52,8 @@ type App struct {
 	Executable      string            `json:"executable"`
 	SteamAppID      string            `json:"steam_app_id,omitempty"`
 	WineArch        string            `json:"wine_arch,omitempty"`
+	LaunchArgs      []string          `json:"launch_args,omitempty"`
+	Winetricks      []string          `json:"winetricks,omitempty"`
 	UMUOptions      UMUOptions        `json:"umu_options,omitempty"`
 	Dependencies    AppDependencies   `json:"dependencies"`
 	DLLOverrides    map[string]string `json:"dll_overrides"`
@@ -109,6 +111,8 @@ func LoadOrCreateApp(appType, appName string, globalCfg Global) (App, error) {
 		ProtonVersion: firstProton,
 		LaunchMethod:  "direct",
 		Executable:    "drive_c/windows/explorer.exe",
+		LaunchArgs:    []string{},
+		Winetricks:    []string{},
 	}
 
 	if err := writeJSONFile(configPath, defaultCfg); err != nil {

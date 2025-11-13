@@ -129,7 +129,7 @@ func RunDirectly(prefixPath string, appCfg config.App, globalCfg config.Global, 
 
 	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
 	args := []string{fullExePath}
-	args = append(args, appCfg.UMUOptions.LaunchArgs...)
+	args = append(args, appCfg.LaunchArgs...)
 
 	cmd := exec.Command(wineExecutablePath, args...)
 	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
@@ -178,7 +178,7 @@ func RunInContainer(prefixPath string, appCfg config.App, globalCfg config.Globa
 		protonVerb,
 		fullExePath,
 	}
-	args = append(args, appCfg.UMUOptions.LaunchArgs...)
+	args = append(args, appCfg.LaunchArgs...)
 
 	cmd := exec.Command(entryPointPath, args...)
 	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
@@ -209,7 +209,7 @@ func RunWithUMU(prefixPath string, appCfg config.App, globalCfg config.Global, d
 	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo, wineArch))
 	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
 
-	args := append([]string{fullExePath}, appCfg.UMUOptions.LaunchArgs...)
+	args := append([]string{fullExePath}, append(appCfg.LaunchArgs, appCfg.UMUOptions.LaunchArgs...)...)
 	cmd := exec.Command(umuRunPath, args...)
 
 	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
