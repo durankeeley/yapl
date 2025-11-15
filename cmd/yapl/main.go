@@ -17,6 +17,7 @@ func main() {
 	// --- Flag Definition ---
 	gameName := flag.String("game", "", "The name of the game directory inside ./games/.")
 	appName := flag.String("app", "", "The name of the application directory inside ./apps/.")
+	configName := flag.String("config", "", "Specify a custom config file name (e.g., mod-a.json). Defaults to game.json or app.json.")
 	upgradeProton := flag.Bool("upgrade-proton", false, "Force re-download of the Proton version.")
 	packageFormat := flag.String("format", "gz", "Compression format for packaging (gz, xz, zst).")
 	debugMode := flag.Bool("debug", false, "Enable verbose Proton logging for debugging.")
@@ -34,7 +35,7 @@ func main() {
 		return
 	}
 
-	app, err := initializeApp(*gameName, *appName, *upgradeProton, *debugMode, *isSteamPrefix)
+	app, err := initializeApp(*gameName, *appName, *configName, *upgradeProton, *debugMode, *isSteamPrefix)
 	if err != nil {
 		log.Fatalf("❌ Error initializing application: %v", err)
 	}
@@ -58,7 +59,7 @@ func main() {
 }
 
 // initializeApp determines the target, loads configuration, and constructs the main App object.
-func initializeApp(gameName, appName string, force, debug, steam bool) (*app.App, error) {
+func initializeApp(gameName, appName, configName string, force, debug, steam bool) (*app.App, error) {
 	if gameName == "" && appName == "" {
 		return nil, fmt.Errorf("--game or --app flag is required")
 	}
@@ -75,7 +76,7 @@ func initializeApp(gameName, appName string, force, debug, steam bool) (*app.App
 		return nil, fmt.Errorf("could not load global config: %w", err)
 	}
 
-	appCfg, err := config.LoadOrCreateApp(targetType, targetName, globalCfg)
+	appCfg, err := config.LoadOrCreateApp(targetType, targetName, configName, globalCfg)
 	if err != nil {
 		return nil, fmt.Errorf("could not load or create app config: %w", err)
 	}

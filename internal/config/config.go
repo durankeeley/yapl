@@ -82,13 +82,22 @@ func LoadOrCreateGlobal(path string) (Global, error) {
 	return defaultCfg, nil
 }
 
-func LoadOrCreateApp(appType, appName string, globalCfg Global) (App, error) {
+func LoadOrCreateApp(appType, appName, configName string, globalCfg Global) (App, error) {
 	appDir := filepath.Join(appType, appName)
-	configName := "game.json"
-	if appType == "apps" {
-		configName = "app.json"
+
+	var configFileName string
+	if configName != "" {
+		configFileName = configName
+	} else {
+		// No custom name, use the default
+		if appType == "games" {
+			configFileName = "game.json"
+		} else {
+			configFileName = "app.json"
+		}
 	}
-	configPath := filepath.Join(appDir, configName)
+
+	configPath := filepath.Join(appDir, configFileName)
 
 	var cfg App
 	err := readJSONFile(configPath, &cfg)
@@ -96,7 +105,7 @@ func LoadOrCreateApp(appType, appName string, globalCfg Global) (App, error) {
 		return cfg, err // Return on success or any error other than file not found
 	}
 
-	fmt.Printf("-> No config found. Creating a default '%s' in '%s'...\n", configName, appDir)
+	fmt.Printf("-> No config found. Creating a default '%s' in '%s'...\n", configFileName, appDir)
 	if err := fs.MustCreateDirectory(appDir); err != nil {
 		return App{}, err
 	}
@@ -118,7 +127,7 @@ func LoadOrCreateApp(appType, appName string, globalCfg Global) (App, error) {
 	if err := writeJSONFile(configPath, defaultCfg); err != nil {
 		return App{}, err
 	}
-	fmt.Printf("✅ Default %s created.\n", configName)
+	fmt.Printf("✅ Default %s created.\n", configFileName)
 	return defaultCfg, nil
 }
 
