@@ -46,18 +46,19 @@ type AppDependencies struct {
 }
 
 type App struct {
-	ProtonVersion   string            `json:"proton_version"`
-	RuntimeVersion  string            `json:"runtime_version,omitempty"`
-	LaunchMethod    string            `json:"launch_method,omitempty"`
-	Executable      string            `json:"executable"`
-	SteamAppID      string            `json:"steam_app_id,omitempty"`
-	WineArch        string            `json:"wine_arch,omitempty"`
-	LaunchArgs      []string          `json:"launch_args,omitempty"`
-	Winetricks      []string          `json:"winetricks,omitempty"`
-	UMUOptions      UMUOptions        `json:"umu_options,omitempty"`
-	Dependencies    AppDependencies   `json:"dependencies"`
-	DLLOverrides    map[string]string `json:"dll_overrides"`
-	EnvironmentVars map[string]string `json:"environment_vars"`
+	ProtonVersion      string            `json:"proton_version"`
+	RuntimeVersion     string            `json:"runtime_version,omitempty"`
+	LaunchMethod       string            `json:"launch_method,omitempty"`
+	Executable         string            `json:"executable"`
+	SteamAppID         string            `json:"steam_app_id,omitempty"`
+	WineArch           string            `json:"wine_arch,omitempty"`
+	LaunchArgs         []string          `json:"launch_args,omitempty"`
+	BackgroundServices []string          `json:"background_services,omitempty"`
+	Winetricks         []string          `json:"winetricks,omitempty"`
+	UMUOptions         UMUOptions        `json:"umu_options,omitempty"`
+	Dependencies       AppDependencies   `json:"dependencies"`
+	DLLOverrides       map[string]string `json:"dll_overrides"`
+	EnvironmentVars    map[string]string `json:"environment_vars"`
 }
 
 // --- Loading and Saving Logic ---

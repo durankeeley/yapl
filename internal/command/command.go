@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"yapl/internal/config"
 	"yapl/internal/fs"
@@ -118,26 +119,27 @@ func RunDirectly(prefixPath string, appCfg config.App, globalCfg config.Global, 
 	}
 	fmt.Printf("-> Found wine executable for %s: %s\n", wineArch, wineExecutablePath)
 
-	if appCfg.SteamAppID != "" && appCfg.SteamAppID != "0" {
-		fullExePath := filepath.Join(absPrefix, appCfg.Executable)
-		exeDir := filepath.Dir(fullExePath)
-		appIDPath := filepath.Join(exeDir, "steam_appid.txt")
-		if err := os.WriteFile(appIDPath, []byte(appCfg.SteamAppID), 0644); err != nil {
-			log.Printf("⚠️  Warning: Failed to write steam_appid.txt: %v", err)
-		}
+	if err := setupSteamAppID(absPrefix, appCfg); err != nil {
+		log.Printf("⚠️  Warning: Failed to write steam_appid.txt: %v", err)
 	}
 
+	env := buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
+
+	// --- Handle Background Services ---
+	cleanup := launchBackgroundServices(appCfg.BackgroundServices, wineExecutablePath, []string{}, env, absPrefix)
+	defer cleanup()
+
+	// --- Launch Main Game ---
 	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
 	args := []string{fullExePath}
 	args = append(args, appCfg.LaunchArgs...)
 
 	cmd := exec.Command(wineExecutablePath, args...)
-	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
+	cmd.Env = env
 
 	return executeCommand(cmd)
 }
 
-// RunInContainer launches the application inside the self-managed Steam Linux Runtime container.
 func RunInContainer(prefixPath string, appCfg config.App, globalCfg config.Global, debug bool) error {
 	if appCfg.RuntimeVersion == "" {
 		return errors.New("launch_method 'container' requires 'runtime_version' to be set in game.json")
@@ -155,33 +157,35 @@ func RunInContainer(prefixPath string, appCfg config.App, globalCfg config.Globa
 	protonScriptPath := getProtonScriptPath(appCfg, globalCfg, wineArch)
 
 	if _, err := os.Stat(protonScriptPath); os.IsNotExist(err) {
-		return fmt.Errorf("could not find 'proton' script. The 'container' method requires a full Proton build (like GE-Proton), not a Wine-only build")
+		return fmt.Errorf("could not find 'proton' script. The 'container' method requires a full Proton build")
 	}
 
-	if appCfg.SteamAppID != "" && appCfg.SteamAppID != "0" {
-		fullExePath := filepath.Join(absPrefix, appCfg.Executable)
-		exeDir := filepath.Dir(fullExePath)
-		appIDPath := filepath.Join(exeDir, "steam_appid.txt")
-		if err := os.WriteFile(appIDPath, []byte(appCfg.SteamAppID), 0644); err != nil {
-			log.Printf("⚠️  Warning: Failed to write steam_appid.txt: %v", err)
-		}
+	if err := setupSteamAppID(absPrefix, appCfg); err != nil {
+		log.Printf("⚠️  Warning: Failed to write steam_appid.txt: %v", err)
 	}
 
-	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
+	env := buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
 	protonVerb := "waitforexitandrun"
 
-	args := []string{
+	// Launch Background Services
+	containerArgsPrefix := []string{
 		"--verb=" + protonVerb,
 		"--",
 		shimPath,
 		protonScriptPath,
 		protonVerb,
-		fullExePath,
 	}
+	cleanup := launchBackgroundServices(appCfg.BackgroundServices, entryPointPath, containerArgsPrefix, env, absPrefix)
+	defer cleanup()
+
+	// Launch Main Game
+	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
+
+	args := append(containerArgsPrefix, fullExePath)
 	args = append(args, appCfg.LaunchArgs...)
 
 	cmd := exec.Command(entryPointPath, args...)
-	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
+	cmd.Env = env
 
 	return executeCommand(cmd)
 }
@@ -207,19 +211,27 @@ func RunWithUMU(prefixPath string, appCfg config.App, globalCfg config.Global, d
 	protonVersionInfo := getProtonInfo(appCfg, globalCfg)
 	wineArch := getWineArch(appCfg)
 	protonBasePath, _ := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo, wineArch))
-	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
 
-	args := append([]string{fullExePath}, append(appCfg.LaunchArgs, appCfg.UMUOptions.LaunchArgs...)...)
-	cmd := exec.Command(umuRunPath, args...)
-
-	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
-	cmd.Env = append(cmd.Env, "PROTONPATH="+protonBasePath)
+	// Build Environment
+	env := buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
+	env = append(env, "PROTONPATH="+protonBasePath)
 	if appCfg.UMUOptions.GameID != "" {
-		cmd.Env = append(cmd.Env, "GAMEID="+appCfg.UMUOptions.GameID)
+		env = append(env, "GAMEID="+appCfg.UMUOptions.GameID)
 	}
 	if appCfg.UMUOptions.Store != "" {
-		cmd.Env = append(cmd.Env, "STORE="+appCfg.UMUOptions.Store)
+		env = append(env, "STORE="+appCfg.UMUOptions.Store)
 	}
+
+	// Launch Background Services
+	cleanup := launchBackgroundServices(appCfg.BackgroundServices, umuRunPath, []string{}, env, absPrefix)
+	defer cleanup()
+
+	// Launch Main Game ---
+	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
+	args := append([]string{fullExePath}, append(appCfg.LaunchArgs, appCfg.UMUOptions.LaunchArgs...)...)
+
+	cmd := exec.Command(umuRunPath, args...)
+	cmd.Env = env
 
 	return executeCommand(cmd)
 }
@@ -411,4 +423,48 @@ func getWineArch(appCfg config.App) string {
 		return appCfg.WineArch
 	}
 	return "win64"
+}
+
+func launchBackgroundServices(services []string, runnerBin string, runnerArgsPrefix []string, env []string, absPrefix string) func() {
+	var runningProcs []*os.Process
+
+	for _, svcRelPath := range services {
+		fullSvcPath := filepath.Join(absPrefix, svcRelPath)
+
+		args := append([]string{}, runnerArgsPrefix...)
+		args = append(args, fullSvcPath)
+
+		cmd := exec.Command(runnerBin, args...)
+		cmd.Env = env
+
+		fmt.Printf("🔄 Starting background service: %s\n", filepath.Base(svcRelPath))
+		if err := cmd.Start(); err != nil {
+			log.Printf("⚠️  Failed to start background service '%s': %v", svcRelPath, err)
+			continue
+		}
+
+		runningProcs = append(runningProcs, cmd.Process)
+
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	return func() {
+		if len(runningProcs) == 0 {
+			return
+		}
+		fmt.Println("🧹 Cleaning up background services...")
+		for _, p := range runningProcs {
+			p.Kill()
+		}
+	}
+}
+
+func setupSteamAppID(absPrefix string, appCfg config.App) error {
+	if appCfg.SteamAppID != "" && appCfg.SteamAppID != "0" {
+		fullExePath := filepath.Join(absPrefix, appCfg.Executable)
+		exeDir := filepath.Dir(fullExePath)
+		appIDPath := filepath.Join(exeDir, "steam_appid.txt")
+		return os.WriteFile(appIDPath, []byte(appCfg.SteamAppID), 0644)
+	}
+	return nil
 }
