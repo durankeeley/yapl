@@ -227,6 +227,201 @@ func TestUnpackage_SkipsExistingDestination(t *testing.T) {
 	}
 }
 
+// --- PackageFromDir (PRD-14 bundle) ---
+
+func TestPackageFromDir_ArchiveContainsAllStagedItems(t *testing.T) {
+	// Given a staging directory containing a game dir and a _bundle/ dir
+	staging := t.TempDir()
+	os.MkdirAll(filepath.Join(staging, "Doom"), 0755)
+	os.WriteFile(filepath.Join(staging, "Doom", "game.json"), []byte(`{}`), 0644)
+	os.MkdirAll(filepath.Join(staging, "_bundle", "proton", "ge9"), 0755)
+	os.WriteFile(filepath.Join(staging, "_bundle", "proton", "ge9", "proton"), []byte("#!/bin/sh"), 0755)
+
+	orig, _ := os.Getwd()
+	work := t.TempDir()
+	os.Chdir(work)
+	defer os.Chdir(orig)
+
+	// When PackageFromDir is called
+	if err := PackageFromDir(staging, "Doom", "gz"); err != nil {
+		t.Fatalf("PackageFromDir returned unexpected error: %v", err)
+	}
+
+	// Then the archive exists and contains both Doom/ and _bundle/ paths
+	archPath := filepath.Join(work, "Doom.tar.gz")
+	if _, err := os.Stat(archPath); err != nil {
+		t.Fatalf("archive not created: %v", err)
+	}
+	extractDst := t.TempDir()
+	ar := &Archive{Source: archPath}
+	if err := ar.Extract(extractDst, false); err != nil {
+		t.Fatalf("extract failed: %v", err)
+	}
+	for _, want := range []string{
+		filepath.Join(extractDst, "Doom", "game.json"),
+		filepath.Join(extractDst, "_bundle", "proton", "ge9", "proton"),
+	} {
+		if _, err := os.Stat(want); err != nil {
+			t.Errorf("expected %s in archive but it is missing", want)
+		}
+	}
+}
+
+// --- installBundledDeps ---
+
+func TestInstallBundledDeps_MovesProtonToProtonDir(t *testing.T) {
+	// Given a games/ targetDir containing _bundle/proton/ge9/
+	d := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(d)
+	defer os.Chdir(orig)
+
+	bundledProton := filepath.Join(d, "games", "_bundle", "proton", "ge9")
+	os.MkdirAll(bundledProton, 0755)
+	os.WriteFile(filepath.Join(bundledProton, "proton"), []byte("#!/bin/sh"), 0755)
+
+	// When installBundledDeps is called
+	if err := installBundledDeps("games"); err != nil {
+		t.Fatalf("installBundledDeps returned unexpected error: %v", err)
+	}
+
+	// Then proton/ge9/proton exists at the deployment root
+	if _, err := os.Stat(filepath.Join(d, "proton", "ge9", "proton")); err != nil {
+		t.Errorf("expected proton/ge9/proton to be installed at deployment root: %v", err)
+	}
+	// And the _bundle/ directory is removed
+	if _, err := os.Stat(filepath.Join(d, "games", "_bundle")); !os.IsNotExist(err) {
+		t.Errorf("expected games/_bundle/ to be removed after install")
+	}
+}
+
+func TestInstallBundledDeps_SkipsAlreadyPresentDependency(t *testing.T) {
+	// Given proton/ge9/ already exists AND _bundle/proton/ge9/ is in the archive
+	d := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(d)
+	defer os.Chdir(orig)
+
+	existingProton := filepath.Join(d, "proton", "ge9")
+	os.MkdirAll(existingProton, 0755)
+	os.WriteFile(filepath.Join(existingProton, "existing-file"), []byte("existing"), 0644)
+
+	bundledProton := filepath.Join(d, "games", "_bundle", "proton", "ge9")
+	os.MkdirAll(bundledProton, 0755)
+	os.WriteFile(filepath.Join(bundledProton, "proton"), []byte("#!/bin/sh"), 0755)
+
+	// When installBundledDeps is called
+	if err := installBundledDeps("games"); err != nil {
+		t.Fatalf("installBundledDeps returned unexpected error: %v", err)
+	}
+
+	// Then the existing proton dir is untouched (existing-file is still there)
+	if _, err := os.Stat(filepath.Join(d, "proton", "ge9", "existing-file")); err != nil {
+		t.Errorf("existing proton installation was overwritten: %v", err)
+	}
+}
+
+func TestInstallBundledDeps_NoopWhenNoBundleDir(t *testing.T) {
+	// Given a games/ dir with no _bundle/ subdirectory
+	d := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(d)
+	defer os.Chdir(orig)
+
+	os.MkdirAll(filepath.Join(d, "games", "Doom"), 0755)
+
+	// When installBundledDeps is called
+	err := installBundledDeps("games")
+
+	// Then it returns no error and makes no changes
+	if err != nil {
+		t.Fatalf("expected no error when no bundle dir exists, got: %v", err)
+	}
+}
+
+func TestUnpackage_InstallsBundledProtonToProtonDir(t *testing.T) {
+	// Given an archive that contains a game dir AND a _bundle/proton/ dir
+	d := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(d)
+	defer os.Chdir(orig)
+
+	archPath := filepath.Join(d, "Doom.tar.gz")
+	f, err := os.Create(archPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gw := gzip.NewWriter(f)
+	tw := tar.NewWriter(gw)
+	for name, content := range map[string]string{
+		"Doom/game.json":              `{}`,
+		"_bundle/proton/ge9/proton":   "#!/bin/sh",
+		"_bundle/runner.json":         `{}`,
+	} {
+		hdr := &tar.Header{Name: name, Mode: 0644, Size: int64(len(content))}
+		tw.WriteHeader(hdr)
+		tw.Write([]byte(content))
+	}
+	tw.Close()
+	gw.Close()
+	f.Close()
+
+	os.MkdirAll("games", 0755)
+
+	// When Unpackage is called
+	if err := Unpackage("games", []string{archPath}); err != nil {
+		t.Fatalf("Unpackage returned unexpected error: %v", err)
+	}
+
+	// Then the game was extracted
+	if _, err := os.Stat("games/Doom/game.json"); err != nil {
+		t.Errorf("game.json not found after unpackage: %v", err)
+	}
+	// And the bundled proton was installed to the deployment root
+	if _, err := os.Stat("proton/ge9/proton"); err != nil {
+		t.Errorf("bundled proton not installed to deployment root: %v", err)
+	}
+	// And the _bundle/ dir is gone from games/
+	if _, err := os.Stat("games/_bundle"); !os.IsNotExist(err) {
+		t.Errorf("_bundle/ dir should be removed after install")
+	}
+}
+
+func TestUnpackage_LeavesNoBundleDirAfterExtraction(t *testing.T) {
+	// Given a normal (non-bundled) archive with no _bundle/ dir
+	d := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(d)
+	defer os.Chdir(orig)
+
+	archPath := filepath.Join(d, "Quake.tar.gz")
+	f, err := os.Create(archPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gw := gzip.NewWriter(f)
+	tw := tar.NewWriter(gw)
+	content := `{}`
+	hdr := &tar.Header{Name: "Quake/game.json", Mode: 0644, Size: int64(len(content))}
+	tw.WriteHeader(hdr)
+	tw.Write([]byte(content))
+	tw.Close()
+	gw.Close()
+	f.Close()
+
+	os.MkdirAll("games", 0755)
+
+	// When Unpackage is called on a normal archive
+	if err := Unpackage("games", []string{archPath}); err != nil {
+		t.Fatalf("Unpackage returned unexpected error: %v", err)
+	}
+
+	// Then no _bundle/ directory exists in games/
+	if _, err := os.Stat("games/_bundle"); !os.IsNotExist(err) {
+		t.Errorf("_bundle/ dir should not exist for a non-bundled archive")
+	}
+}
+
 // --- trimArchiveSuffix ---
 
 func TestTrimArchiveSuffix(t *testing.T) {

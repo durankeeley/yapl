@@ -36,3 +36,11 @@ Do not skip steps. The workflow is defined in CLAUDE.md under "Workflow". In sho
 ## 5. Tests Are Non-Negotiable
 
 Every piece of new work must include tests. No exceptions. PRs without tests will be rejected.
+
+## 6. Update Documentation After Every PRD
+
+After marking a PRD as Complete, you **must**:
+
+1. Update `README.md` to reflect any new commands, config options, or behaviour changes.
+2. Update any relevant guide in `docs/` (e.g., `docs/developer-guide.md`) if the internal architecture changed.
+3. Commit the documentation updates in the same commit as the implementation, or as an immediate follow-up commit before moving the PRD to `prds/done/`.
