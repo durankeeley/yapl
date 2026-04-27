@@ -1,6 +1,6 @@
 # PRD 1 - Production Readiness & Code Improvements
 
-**Status:** `[ ] Pending` | `[x] In Progress` | `[ ] Complete`
+**Status:** `[ ] Pending` | `[ ] In Progress` | `[x] Complete`
 **Priority:** High
 **Size:** L
 **Sprint:** 1
@@ -87,18 +87,23 @@ Fix each issue in isolation so each change is easy to review and test. Add a com
 
 ## 4. Execution & Milestones
 
-- [ ] Write failing tests for `internal/fs` (CopyFile, CopyDir symlinks, DirExistsAndIsNotEmpty)
-- [ ] Fix `CopyDir` to handle symlinks — tests pass
-- [ ] Write failing tests for `internal/archive` (extract, package, path traversal rejection)
-- [ ] Fix path traversal check — tests pass
-- [ ] Write failing tests for `internal/config` (load/create round-trip)
-- [ ] Write failing tests for `internal/command` (buildProtonEnv, buildDllOverridesString sorted, restructureProtonPrefix)
-- [ ] Fix `buildDllOverridesString` to sort keys — tests pass
-- [ ] Fix `executeCommand` to return errors — tests pass
-- [ ] Remove `log.Fatalf` from `MustGetAbsolutePath` and `getProtonInfo` — update all call sites — tests pass
-- [ ] Add HTTP timeout to `archive` and `runtime` packages — tests pass (mock server or skip network)
-- [ ] All `go test ./...` green
-- [ ] Move PRD to `prds/done/`
+- [x] Write failing tests for `internal/fs` (CopyFile, CopyDir symlinks, DirExistsAndIsNotEmpty)
+- [x] Fix `CopyDir` to handle symlinks — tests pass
+- [x] Write failing tests for `internal/archive` (extract, package, path traversal rejection)
+- [x] Fix path traversal check — tests pass
+- [x] Write failing tests for `internal/config` (load/create round-trip)
+- [x] Write failing tests for `internal/command` (buildProtonEnv, buildDllOverridesString sorted, restructureProtonPrefix)
+- [x] Fix `buildDllOverridesString` to sort keys — tests pass
+- [x] Fix `executeCommand` to return errors — tests pass
+- [x] Remove `log.Fatalf` from `getProtonInfo` — add `GetAbsolutePath` returning error — update all call sites — tests pass
+- [x] Add HTTP timeout (30 min) to `archive` and `runtime` packages
+- [x] Fix `Unpackage` to extract to `targetDir` not `destPath` (double-nesting bug)
+- [x] All `go test ./...` green
+- [x] Move PRD to `prds/done/`
+
+**Additional items captured for follow-up PRDs:**
+- Wine 11 WoW64 makes `win32` arch handling and `patchProtonForWin32` obsolete — remove this code path (see PRD-2)
+- Investigate setup/import bugs for existing Wine prefixes imported from Lutris or other launchers (see PRD-3)
 
 ---
 

@@ -213,9 +213,32 @@ The output binary has no external runtime dependencies. Copy it anywhere.
 
 ---
 
-## Common gotchas
+## Importing an existing prefix from Lutris
 
-**The Wine prefix must match the architecture.** A `win32` game needs a 32-bit prefix. YAPL handles this via the `wine_arch` field in `game.json`. If you mix them up, the game won't start and Proton will print confusing errors.
+If you have already set up a game in Lutris and want to bring it into YAPL:
+
+1. Find the Lutris prefix. It is usually somewhere under `~/.local/share/lutris/runners/wine/` or `~/Games/`.
+2. Copy (or move) it to `games/YourGameName/prefix/`.
+3. Create a `games/YourGameName/game.json` pointing at the executable (path relative to `prefix/`).
+4. Run `./yapl --game YourGameName run`.
+
+YAPL auto-detects both prefix layouts:
+- **Flat layout** (YAPL standard): `system.reg` at `prefix/system.reg`
+- **Lutris/raw Proton layout**: `system.reg` at `prefix/pfx/system.reg`
+
+When the Lutris layout is detected, YAPL migrates it to the flat layout automatically by moving the files out of `pfx/` and creating a `pfx → .` symlink in its place. This happens once and is printed to the console.
+
+## Using system Wine
+
+Set `"proton_version": "system"` in `game.json` and omit `proton_version` from `runner.json` (or add an empty entry). YAPL will use `wine64` or `wine` from your `PATH` to create and run the prefix. Useful for quick testing but gives less isolation than a pinned Proton build.
+
+## 32-bit games
+
+Wine 11.0+ (January 2026) finalized WoW64 mode: a single 64-bit Wine process can run 32-bit and 16-bit Windows applications with no extra setup. All modern Proton builds (GE-Proton, CachyOS Proton, etc.) include this. You do not need to set any special config for 32-bit games — just point YAPL at the executable and it will work.
+
+The old `wine_arch: win32` config option has been removed.
+
+## Common gotchas
 
 **Proton and DXVK are shared.** If you delete the `proton/` folder it affects every game. Download only the versions you need.
 

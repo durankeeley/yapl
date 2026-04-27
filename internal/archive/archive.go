@@ -11,10 +11,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/ulikunitz/xz"
 )
+
+// downloadTimeout caps how long a single HTTP download may take.
+const downloadTimeout = 30 * time.Minute
+
+var httpClient = &http.Client{Timeout: downloadTimeout}
 
 // Archive represents a local or remote compressed tarball.
 type Archive struct {
@@ -37,7 +43,6 @@ func (a *Archive) Extract(destPath string, stripTopLevelDir bool) error {
 	if err != nil {
 		return err
 	}
-	// **FIX:** Pass the stripTopLevelDir boolean to the extractTar function.
 	return extractTar(decompressedReader, destPath, stripTopLevelDir)
 }
 
@@ -76,14 +81,16 @@ func Unpackage(targetDir string, archivePaths []string) error {
 			continue
 		}
 
+		// Guard: skip if the destination folder already exists.
 		destPath := filepath.Join(targetDir, nameWithoutExt)
 		if _, err := os.Stat(destPath); err == nil {
 			log.Printf("⚠️  Skipping '%s': destination '%s' already exists.", archivePath, destPath)
 			continue
 		}
 
+		// Extract to the parent targetDir; the archive already contains the named subdirectory.
 		ar := &Archive{Source: archivePath}
-		if err := ar.Extract(destPath, false); err != nil {
+		if err := ar.Extract(targetDir, false); err != nil {
 			log.Printf("❌ Failed to unpackage '%s': %v", archivePath, err)
 		} else {
 			fmt.Printf("✅ Successfully unpackaged to '%s'\n", destPath)
@@ -96,7 +103,7 @@ func Unpackage(targetDir string, archivePaths []string) error {
 func (a *Archive) open() (io.ReadCloser, error) {
 	if strings.HasPrefix(a.Source, "http") {
 		fmt.Printf(" Downloading from %s...\n", a.Source)
-		resp, err := http.Get(a.Source)
+		resp, err := httpClient.Get(a.Source)
 		if err != nil {
 			return nil, fmt.Errorf("http get: %w", err)
 		}
@@ -127,11 +134,12 @@ func getDecompressedReader(r io.Reader, sourceFilename string) (io.Reader, error
 
 func extractTar(r io.Reader, destPath string, stripTopLevelDir bool) error {
 	tr := tar.NewReader(r)
+	cleanDest := filepath.Clean(destPath)
 	fmt.Println(" Extracting archive...")
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
-			return nil // End of archive
+			return nil
 		}
 		if err != nil {
 			return fmt.Errorf("reading tar: %w", err)
@@ -141,17 +149,18 @@ func extractTar(r io.Reader, destPath string, stripTopLevelDir bool) error {
 		if stripTopLevelDir {
 			parts := strings.Split(hdr.Name, string(filepath.Separator))
 			if len(parts) <= 1 {
-				continue // Skip top-level directory or files at root
+				continue
 			}
 			relativePath := strings.Join(parts[1:], string(filepath.Separator))
-			target = filepath.Join(destPath, relativePath)
+			target = filepath.Join(cleanDest, relativePath)
 		} else {
-			target = filepath.Join(destPath, hdr.Name)
+			target = filepath.Join(cleanDest, hdr.Name)
 		}
 
-		// **FIX:** Clean the path and add a security check to prevent path traversal.
 		target = filepath.Clean(target)
-		if !strings.HasPrefix(target, destPath) {
+
+		// Reject path traversal: target must be the dest dir itself or a child of it.
+		if target != cleanDest && !strings.HasPrefix(target, cleanDest+string(filepath.Separator)) {
 			return fmt.Errorf("archive contains invalid path: %s", hdr.Name)
 		}
 
