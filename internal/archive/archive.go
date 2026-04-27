@@ -15,6 +15,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/ulikunitz/xz"
+	"yapl/internal/fs"
 )
 
 // downloadTimeout caps how long a single HTTP download may take.
@@ -59,7 +60,7 @@ func Package(sourceDir, format string) error {
 
 	packageName := filepath.Base(sourceDir) + extension
 	fmt.Printf("-> Creating %s bundle '%s'...\n", strings.ToUpper(format), packageName)
-	if err := createBundle(packageName, sourceDir, format); err != nil {
+	if err := createBundle(packageName, sourceDir, filepath.Dir(sourceDir), format); err != nil {
 		return fmt.Errorf("failed to create package: %w", err)
 	}
 	fmt.Println("\n✅ Packaging complete!")
@@ -68,6 +69,8 @@ func Package(sourceDir, format string) error {
 }
 
 // Unpackage extracts one or more archives into a target directory.
+// If an extracted archive contains a _bundle/ directory, its contents are installed
+// into the deployment root (proton/, dependencies/) and the _bundle/ dir is removed.
 func Unpackage(targetDir string, archivePaths []string) error {
 	if len(archivePaths) == 0 {
 		return errors.New("no archive files provided")
@@ -92,12 +95,93 @@ func Unpackage(targetDir string, archivePaths []string) error {
 		ar := &Archive{Source: archivePath}
 		if err := ar.Extract(targetDir, false); err != nil {
 			log.Printf("❌ Failed to unpackage '%s': %v", archivePath, err)
-		} else {
-			fmt.Printf("✅ Successfully unpackaged to '%s'\n", destPath)
+			continue
+		}
+		fmt.Printf("✅ Successfully unpackaged to '%s'\n", destPath)
+
+		// Install bundled dependencies if the archive contained a _bundle/ dir.
+		if err := installBundledDeps(targetDir); err != nil {
+			log.Printf("⚠️  Bundle install failed: %v", err)
 		}
 	}
 	fmt.Println("\n✨ Unpackaging complete!")
 	return nil
+}
+
+// PackageFromDir creates a compressed bundle from all contents of dir,
+// using archive entry names relative to dir itself (not its parent).
+func PackageFromDir(dir, archiveName, format string) error {
+	extension, err := getExtensionForFormat(format)
+	if err != nil {
+		return err
+	}
+	packageName := archiveName + extension
+	fmt.Printf("-> Creating %s bundle '%s'...\n", strings.ToUpper(format), packageName)
+	if err := createBundle(packageName, dir, dir, format); err != nil {
+		return fmt.Errorf("failed to create package: %w", err)
+	}
+	fmt.Println("\n✅ Packaging complete!")
+	fmt.Printf("➡️ Distribute '%s' to other machines.\n", packageName)
+	return nil
+}
+
+// installBundledDeps processes a _bundle/ directory that may have been extracted
+// into targetDir, installing its contents into the deployment root.
+func installBundledDeps(targetDir string) error {
+	bundleDir := filepath.Join(targetDir, "_bundle")
+	if _, err := os.Stat(bundleDir); os.IsNotExist(err) {
+		return nil
+	}
+
+	installDir := func(src, dst string) error {
+		if fs.DirExistsAndIsNotEmpty(dst) {
+			fmt.Printf("-> Skipping bundled '%s': already present\n", filepath.Base(dst))
+			return nil
+		}
+		fmt.Printf("-> Installing bundled '%s'...\n", filepath.Base(dst))
+		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+			return err
+		}
+		return fs.CopyDir(src, dst)
+	}
+
+	// Install proton versions.
+	protonSrc := filepath.Join(bundleDir, "proton")
+	if entries, err := os.ReadDir(protonSrc); err == nil {
+		for _, e := range entries {
+			if err := installDir(filepath.Join(protonSrc, e.Name()), filepath.Join("proton", e.Name())); err != nil {
+				return fmt.Errorf("install bundled proton: %w", err)
+			}
+		}
+	}
+
+	// Install dependencies (dxvk, vkd3d, runtime, etc.).
+	depsSrc := filepath.Join(bundleDir, "dependencies")
+	if depTypes, err := os.ReadDir(depsSrc); err == nil {
+		for _, depType := range depTypes {
+			versions, _ := os.ReadDir(filepath.Join(depsSrc, depType.Name()))
+			for _, ver := range versions {
+				src := filepath.Join(depsSrc, depType.Name(), ver.Name())
+				dst := filepath.Join("dependencies", depType.Name(), ver.Name())
+				if err := installDir(src, dst); err != nil {
+					return fmt.Errorf("install bundled %s: %w", depType.Name(), err)
+				}
+			}
+		}
+	}
+
+	// Install runner.json only if one does not already exist.
+	bundledRunner := filepath.Join(bundleDir, "runner.json")
+	if _, err := os.Stat(bundledRunner); err == nil {
+		if _, err := os.Stat("runner.json"); os.IsNotExist(err) {
+			fmt.Println("-> Installing bundled runner.json...")
+			if err := fs.CopyFile(bundledRunner, "runner.json"); err != nil {
+				return fmt.Errorf("install bundled runner.json: %w", err)
+			}
+		}
+	}
+
+	return os.RemoveAll(bundleDir)
 }
 
 func (a *Archive) open() (io.ReadCloser, error) {
@@ -191,7 +275,7 @@ func extractTar(r io.Reader, destPath string, stripTopLevelDir bool) error {
 	}
 }
 
-func createBundle(bundleName, sourceDir, format string) error {
+func createBundle(bundleName, walkDir, baseDir, format string) error {
 	f, err := os.Create(bundleName)
 	if err != nil {
 		return fmt.Errorf("create bundle: %w", err)
@@ -215,7 +299,7 @@ func createBundle(bundleName, sourceDir, format string) error {
 	tw := tar.NewWriter(compressor)
 	defer tw.Close()
 
-	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+	return filepath.Walk(walkDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -223,7 +307,7 @@ func createBundle(bundleName, sourceDir, format string) error {
 		if err != nil {
 			return err
 		}
-		header.Name, err = filepath.Rel(filepath.Dir(sourceDir), path)
+		header.Name, err = filepath.Rel(baseDir, path)
 		if err != nil {
 			return err
 		}

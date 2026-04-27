@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"yapl/internal/archive"
@@ -32,6 +33,11 @@ func EnsureAll(appCfg config.App, forceUpgrade bool, globalCfg config.Global) er
 }
 
 func ensureProton(appCfg config.App, forceUpgrade bool, globalCfg config.Global) error {
+	// "system" means use whatever wine is in PATH — nothing to download or validate.
+	if appCfg.ProtonVersion == "system" {
+		return nil
+	}
+
 	vinfo, ok := globalCfg.ProtonVersions[appCfg.ProtonVersion]
 	if !ok {
 		return fmt.Errorf("proton version '%s' not defined in runner.json", appCfg.ProtonVersion)
@@ -123,6 +129,31 @@ func install(name, version, installPath, prefixPath string, dlls []string) error
 		if err := fs.CopyFile(srcPath, dstPath); err != nil {
 			log.Printf("⚠️  Failed to copy %s: %v", file, err)
 		}
+	}
+	return nil
+}
+
+// EnsureWinetricks runs winetricks to install the requested packages into the Wine prefix.
+// It is a no-op when packages is empty. The winetricks binary must be in PATH.
+func EnsureWinetricks(prefixPath string, packages []string) error {
+	if len(packages) == 0 {
+		return nil
+	}
+	winetricksPath, err := exec.LookPath("winetricks")
+	if err != nil {
+		return fmt.Errorf("winetricks not found in PATH; install it to use the winetricks config option")
+	}
+	absPrefix, err := filepath.Abs(prefixPath)
+	if err != nil {
+		return fmt.Errorf("could not resolve prefix path: %w", err)
+	}
+	args := append([]string{"--unattended"}, packages...)
+	cmd := exec.Command(winetricksPath, args...)
+	cmd.Env = append(os.Environ(), "WINEPREFIX="+absPrefix)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("winetricks failed: %w", err)
 	}
 	return nil
 }

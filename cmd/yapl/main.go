@@ -20,6 +20,8 @@ func main() {
 	configName := flag.String("config", "", "Specify a custom config file name (e.g., mod-a.json). Defaults to game.json or app.json.")
 	upgradeProton := flag.Bool("upgrade-proton", false, "Force re-download of the Proton version.")
 	packageFormat := flag.String("format", "gz", "Compression format for packaging (gz, xz, zst).")
+	bundleDeps := flag.Bool("bundle-deps", false, "Bundle Proton and dependencies into the package for offline deployment.")
+	bundleYes := flag.Bool("yes", false, "Skip confirmation prompts (e.g. for --bundle-deps size warning).")
 	debugMode := flag.Bool("debug", false, "Enable verbose Proton logging for debugging.")
 	isSteamPrefix := flag.Bool("steam", false, "Run as a Steam client prefix, ignoring the configured executable.")
 	flag.Parse()
@@ -35,23 +37,34 @@ func main() {
 		return
 	}
 
-	app, err := initializeApp(*gameName, *appName, *configName, *upgradeProton, *debugMode, *isSteamPrefix)
+	if command == "list" {
+		if err := app.ListAll(os.Stdout); err != nil {
+			log.Fatalf("❌ List failed: %v", err)
+		}
+		return
+	}
+
+	a, err := initializeApp(*gameName, *appName, *configName, *upgradeProton, *debugMode, *isSteamPrefix)
 	if err != nil {
 		log.Fatalf("❌ Error initializing application: %v", err)
 	}
 
 	switch command {
 	case "setup":
-		if err := app.Setup(); err != nil {
+		if err := a.Setup(); err != nil {
 			log.Fatalf("❌ Setup failed: %v", err)
 		}
 	case "package":
-		if err := app.Package(*packageFormat); err != nil {
+		if err := a.Package(*packageFormat, *bundleDeps, *bundleYes); err != nil {
 			log.Fatalf("❌ Packaging failed: %v", err)
 		}
 	case "run":
-		if err := app.Run(); err != nil {
+		if err := a.Run(); err != nil {
 			log.Fatalf("❌ Run failed: %v", err)
+		}
+	case "info":
+		if err := a.Info(os.Stdout); err != nil {
+			log.Fatalf("❌ Info failed: %v", err)
 		}
 	default:
 		log.Fatalf("❌ Error: Unknown command '%s'.", command)

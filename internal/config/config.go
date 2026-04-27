@@ -130,6 +130,13 @@ func LoadOrCreateApp(appType, appName, configName string, globalCfg Global) (App
 	return defaultCfg, nil
 }
 
+// LoadApp reads an existing app config file without creating one if missing.
+func LoadApp(path string) (App, error) {
+	var cfg App
+	err := readJSONFile(path, &cfg)
+	return cfg, err
+}
+
 func readJSONFile(path string, v interface{}) error {
 	data, err := os.ReadFile(path)
 	if err != nil {

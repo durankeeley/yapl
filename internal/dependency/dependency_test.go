@@ -3,6 +3,7 @@ package dependency
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"yapl/internal/config"
@@ -110,6 +111,86 @@ func TestEnsureProton_ErrorsWhenVersionNotInGlobalConfig(t *testing.T) {
 	// Then it returns an error
 	if err == nil {
 		t.Fatal("expected an error for an undefined proton version but got nil")
+	}
+}
+
+func TestEnsureProton_SystemProtonVersionIsNoop(t *testing.T) {
+	// Given proton_version is "system" with no matching entry in runner.json
+	appCfg := config.App{ProtonVersion: "system"}
+	globalCfg := config.Global{ProtonVersions: map[string]config.VersionInfo{}}
+
+	// When ensureProton is called
+	err := ensureProton(appCfg, false, globalCfg)
+
+	// Then it returns nil without erroring about a missing version
+	if err != nil {
+		t.Fatalf("expected nil for system proton version but got: %v", err)
+	}
+}
+
+// --- EnsureWinetricks ---
+
+func TestEnsureWinetricks_SkipsWhenListEmpty(t *testing.T) {
+	// Given an empty winetricks package list
+	prefixDir := t.TempDir()
+
+	// When EnsureWinetricks is called with no packages
+	err := EnsureWinetricks(prefixDir, nil)
+
+	// Then it returns nil without doing anything
+	if err != nil {
+		t.Fatalf("expected nil for empty package list but got: %v", err)
+	}
+}
+
+func TestEnsureWinetricks_ErrorsWhenWinetricksNotInPath(t *testing.T) {
+	// Given winetricks is not in PATH
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", t.TempDir())
+	defer os.Setenv("PATH", origPath)
+
+	// When EnsureWinetricks is called with packages
+	err := EnsureWinetricks(t.TempDir(), []string{"vcrun2022"})
+
+	// Then it returns an error mentioning winetricks not found
+	if err == nil {
+		t.Fatal("expected an error when winetricks is not in PATH but got nil")
+	}
+	if !strings.Contains(err.Error(), "winetricks not found") {
+		t.Fatalf("expected error to mention 'winetricks not found', got: %v", err)
+	}
+}
+
+func TestEnsureWinetricks_RunsSingleInvocationWithAllPackages(t *testing.T) {
+	// Given a fake winetricks script that records its arguments
+	d := t.TempDir()
+	argsFile := filepath.Join(d, "winetricks.args")
+	script := "#!/bin/sh\necho \"$@\" > " + argsFile + "\nexit 0\n"
+	scriptPath := filepath.Join(d, "winetricks")
+	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", d+":"+origPath)
+	defer os.Setenv("PATH", origPath)
+
+	// When EnsureWinetricks is called with multiple packages
+	if err := EnsureWinetricks(t.TempDir(), []string{"vcrun2022", "dotnet48"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Then winetricks was called once with all packages in a single invocation
+	argsBytes, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal("winetricks was not called: args file not created")
+	}
+	argsStr := strings.TrimSpace(string(argsBytes))
+	if !strings.Contains(argsStr, "vcrun2022") || !strings.Contains(argsStr, "dotnet48") {
+		t.Fatalf("expected both packages in single invocation, got: %q", argsStr)
+	}
+	if strings.Count(argsStr, "\n") > 0 {
+		t.Fatalf("expected single invocation but got multiple lines: %q", argsStr)
 	}
 }
 

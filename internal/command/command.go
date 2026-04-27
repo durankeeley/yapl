@@ -79,6 +79,11 @@ func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Glo
 	return RunInContainer(prefixPath, explorerCfg, globalCfg, debug)
 }
 
+// PrefixIsInitialized is the exported form of prefixIsInitialized for use in other packages.
+func PrefixIsInitialized(absPrefix string) bool {
+	return prefixIsInitialized(absPrefix)
+}
+
 // prefixIsInitialized returns true if the directory looks like an existing Wine prefix.
 // It checks both the flat (YAPL standard) layout and the pfx/ subdirectory (Lutris/raw Proton) layout.
 func prefixIsInitialized(absPrefix string) bool {

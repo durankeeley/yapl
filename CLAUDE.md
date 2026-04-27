@@ -119,6 +119,18 @@ go test ./...
 go test -v ./internal/...
 ```
 
+## Documentation Requirement
+
+After every PRD or task is completed:
+
+1. Update `README.md` to reflect any new commands, config options, or behaviour that users will see.
+2. Update any relevant file in `docs/` if internal architecture changed (e.g., `docs/developer-guide.md`).
+3. Include documentation updates in the same commit as the implementation, or as a direct follow-up commit before the PRD is moved to `prds/done/`.
+
+Never mark a PRD Complete without checking whether the docs need updating.
+
+---
+
 ## Skills
 
 Before any task, read `SKILLS/PRD/SKILL/SKILL.md` to understand how to create worktrees and manage PRDs.

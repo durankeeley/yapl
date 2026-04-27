@@ -62,11 +62,21 @@ That's it\! Now you can launch the game with all its dependencies perfectly conf
 ./yapl --game "Game" run
 ```
 
-To deploy on another machine, simply copy the `yapl` binary, your `runner.json`, the shared `dependencies` and `proton` folders, and the packaged game archive. Then run:
+**Online deployment** — copy the `yapl` binary, `runner.json`, the shared `dependencies/` and `proton/` folders, and the archive. Then run:
 
 ```bash
-# This extracts the archive into the ./games/ directory
 ./yapl unpackage "Game.tar.xz"
+```
+
+**Offline / LAN deployment** — use `--bundle-deps` when packaging so all dependencies are included in the archive. On the target machine you only need `yapl` and the archive:
+
+```bash
+# source machine
+./yapl --game "Game" package --format xz --bundle-deps --yes
+
+# target machine (no internet needed)
+./yapl unpackage "Game.tar.xz"
+./yapl --game "Game" run
 ```
 
 -----
@@ -79,6 +89,88 @@ To deploy on another machine, simply copy the `yapl` binary, your `runner.json`,
 | `run`       | Launches the application using the configured environment.              |
 | `package`   | Compresses the entire game/app directory into a single `.tar` archive.    |
 | `unpackage` | Extracts one or more game/app archives into the appropriate directory (`games` or `apps`). |
+| `list`      | Lists all configured games and apps in the current working directory.       |
+| `info`      | Displays the resolved configuration and readiness status for a specific game or app. |
+
+### `list` — discover what's installed
+
+```bash
+./yapl list | column -t
+```
+
+Output:
+```
+TYPE  NAME       PROTON        METHOD  EXECUTABLE
+game  Doom       ge-proton-9   direct  drive_c/Games/Doom/doom.exe
+app   SteamCMD   system        direct  drive_c/steamcmd/steamcmd.exe
+```
+
+`list` scans `games/` and `apps/` and prints a tab-separated summary. Pipe to `column -t` for aligned columns.
+
+### `info` — check readiness before a LAN event
+
+```bash
+./yapl --game "Doom" info
+```
+
+Output:
+```
+Game:          Doom
+Config file:   games/Doom/game.json
+Proton:        ge-proton-9    [proton/ge-proton-9]  ✓ present
+DXVK:          2.3            [dependencies/dxvk/2.3]  ✓ present
+VKD3D:         (not set)
+Runtime:       (not set)
+Prefix:        games/Doom/prefix  ✓ initialised
+Launch method: direct
+Executable:    drive_c/Games/Doom/doom.exe
+```
+
+### `package --bundle-deps` — offline / LAN portability
+
+Bundle Proton and all configured dependencies inside the archive so the target machine needs no internet access:
+
+```bash
+./yapl --game "Doom" package --format xz --bundle-deps
+# Warning: bundled package will be approximately 4.2 GB. Continue? [y/N]: y
+```
+
+On the target machine, just run `yapl unpackage` as normal — Proton and dependencies are installed automatically from the bundle:
+
+```bash
+./yapl unpackage Doom.tar.xz
+# -> Installing bundled 'ge-proton-9'...
+# -> Installing bundled runner.json...
+```
+
+Use `--yes` to skip the size confirmation prompt in scripts.
+
+### Using system Wine
+
+Set `"proton_version": "system"` in `game.json` to use whatever `wine64` or `wine` is in your `PATH`. No entry in `runner.json` is needed.
+
+```json
+{
+  "proton_version": "system",
+  "launch_method": "direct",
+  "executable": "drive_c/steamcmd/steamcmd.exe"
+}
+```
+
+### Winetricks
+
+Add a `"winetricks"` array to `game.json` to install Windows redistributables into the prefix during `setup` and `run`:
+
+```json
+{
+  "proton_version": "ge-proton-9",
+  "launch_method": "direct",
+  "executable": "drive_c/Games/MyGame/game.exe",
+  "winetricks": ["vcrun2022", "dotnet48"]
+}
+```
+
+`winetricks` must be installed and in your `PATH`.
 
 ## Flags
 
@@ -88,6 +180,8 @@ To deploy on another machine, simply copy the `yapl` binary, your `runner.json`,
 | `--app <name>`     | Specifies the target app directory within `./apps/`.                                                          |
 | `--upgrade-proton` | Forces a re-download of the configured Proton version, even if it already exists.                             |
 | `--format <type>`  | Sets the compression format for `package`. Options: `gz`, `xz`, `zst`. (Default: `gz`).                 |
+| `--bundle-deps`    | Bundles Proton and dependencies into the package for offline deployment. Use with `package`.                 |
+| `--yes`            | Skips confirmation prompts (e.g. the size warning for `--bundle-deps`).                                      |
 | `--debug`          | Enables verbose logging from Proton and DXVK (`PROTON_LOG=1`, etc.).                                        |
 | `--steam`          | A compatibility flag. It is **not** compatible with the `direct` launch method and is intended for container-based launches. |
 
