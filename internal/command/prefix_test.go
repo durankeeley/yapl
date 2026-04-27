@@ -100,6 +100,70 @@ func TestRestructureProtonPrefix_IsNoopWhenPfxIsAlreadySymlink(t *testing.T) {
 
 // --- system Wine prefix initialization ---
 
+// --- launch-method-aware prefix initialization ---
+
+func makeFakeProton(t *testing.T) (protonDir string, globalCfg config.Global) {
+	t.Helper()
+	protonDir = t.TempDir()
+	binDir := filepath.Join(protonDir, "files", "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	fakeWine := filepath.Join(binDir, "wine64")
+	if err := os.WriteFile(fakeWine, []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	globalCfg = config.Global{
+		ProtonVersions: map[string]config.VersionInfo{
+			"fake-proton": {Path: protonDir},
+		},
+	}
+	return protonDir, globalCfg
+}
+
+func TestInitializePrefix_DirectMethod_DoesNotRequireProtonScript(t *testing.T) {
+	// Given a Proton build that has wine64 but NO proton script
+	_, globalCfg := makeFakeProton(t)
+	prefixDir := t.TempDir()
+	appCfg := config.App{
+		ProtonVersion: "fake-proton",
+		LaunchMethod:  "direct",
+		Executable:    "drive_c/windows/explorer.exe",
+	}
+
+	// When InitializePrefix is called with launch_method "direct"
+	err := InitializePrefix(prefixDir, appCfg, globalCfg, false)
+
+	// Then it succeeds: wine64 handles init, no proton script needed
+	if err != nil {
+		t.Fatalf("direct method should not require the proton script but got: %v", err)
+	}
+}
+
+func TestInitializePrefix_ContainerMethod_ErrorsWhenProtonScriptMissing(t *testing.T) {
+	// Given a Proton directory that has NO proton script (e.g. a custom Wine build)
+	_, globalCfg := makeFakeProton(t)
+	prefixDir := t.TempDir()
+	appCfg := config.App{
+		ProtonVersion:  "fake-proton",
+		LaunchMethod:   "container",
+		RuntimeVersion: "sniper",
+		Executable:     "drive_c/game.exe",
+	}
+
+	// When InitializePrefix is called with launch_method "container"
+	err := InitializePrefix(prefixDir, appCfg, globalCfg, false)
+
+	// Then it fails explicitly because the proton script is missing
+	if err == nil {
+		t.Fatal("expected an error when the proton script is missing for container method")
+	}
+	// Error message uses single-quotes around 'proton' in the script path description
+	if !containsStr(err.Error(), "proton' script") {
+		t.Fatalf("expected error to mention proton script, got: %v", err)
+	}
+}
+
 func TestInitializePrefix_SystemWineUsesExecLookPath(t *testing.T) {
 	// Given a config with proton_version set to "system"
 	d := t.TempDir()

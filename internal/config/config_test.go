@@ -103,7 +103,7 @@ func TestLoadOrCreateApp_CreatesDefaultGameJson(t *testing.T) {
 	}
 
 	// When LoadOrCreateApp is called for a new game
-	app, err := LoadOrCreateApp("games", "TestGame", "", globalCfg)
+	app, err := LoadOrCreateApp("games", "TestGame", "", globalCfg, "")
 
 	// Then it returns a default config seeded with the first proton version from the global config
 	if err != nil {
@@ -119,6 +119,34 @@ func TestLoadOrCreateApp_CreatesDefaultGameJson(t *testing.T) {
 	}
 }
 
+func TestLoadOrCreateApp_DefaultsToContainerLaunchMethod(t *testing.T) {
+	// Given a global config with a proton version and a runtime version
+	d := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(d)
+	defer os.Chdir(orig)
+
+	globalCfg := Global{
+		ProtonVersions:  map[string]VersionInfo{"ge-proton-9": {URL: "http://example.com"}},
+		RuntimeVersions: map[string]VersionInfo{"sniper": {URL: "http://example.com/runtime"}},
+	}
+
+	// When LoadOrCreateApp creates a fresh default config
+	app, err := LoadOrCreateApp("games", "NewGame", "", globalCfg, "")
+
+	// Then the default launch method is "container" (not "direct") — safest default
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if app.LaunchMethod != "container" {
+		t.Fatalf("expected default LaunchMethod to be 'container', got %q", app.LaunchMethod)
+	}
+	// And the runtime is populated from the global config so the config is immediately usable
+	if app.RuntimeVersion == "" {
+		t.Fatal("expected RuntimeVersion to be populated from the global config's first runtime")
+	}
+}
+
 func TestLoadOrCreateApp_UsesCustomConfigName(t *testing.T) {
 	// Given a working directory and a custom config file name specified
 	d := t.TempDir()
@@ -129,7 +157,7 @@ func TestLoadOrCreateApp_UsesCustomConfigName(t *testing.T) {
 	globalCfg := Global{ProtonVersions: map[string]VersionInfo{"v1": {URL: "http://example.com"}}}
 
 	// When LoadOrCreateApp is called with a custom config name
-	_, err := LoadOrCreateApp("games", "TestGame", "mod-a.json", globalCfg)
+	_, err := LoadOrCreateApp("games", "TestGame", "mod-a.json", globalCfg, "")
 
 	// Then the file is created under the custom name, not the default name
 	if err != nil {
@@ -140,6 +168,58 @@ func TestLoadOrCreateApp_UsesCustomConfigName(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join("games", "TestGame", "game.json")); err == nil {
 		t.Fatal("default game.json should not have been created when a custom name was provided")
+	}
+}
+
+func TestLoadOrCreateApp_MethodFlagOverridesDefault(t *testing.T) {
+	// Given a global config and no existing game.json
+	d := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(d)
+	defer os.Chdir(orig)
+
+	globalCfg := Global{
+		ProtonVersions:  map[string]VersionInfo{"ge-proton-9": {URL: "http://example.com"}},
+		RuntimeVersions: map[string]VersionInfo{"sniper": {URL: "http://example.com/runtime"}},
+	}
+
+	// When LoadOrCreateApp is called with defaultMethod "direct"
+	app, err := LoadOrCreateApp("games", "NFSGame", "", globalCfg, "direct")
+
+	// Then the created config uses "direct" as the launch method
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if app.LaunchMethod != "direct" {
+		t.Fatalf("expected LaunchMethod 'direct', got %q", app.LaunchMethod)
+	}
+}
+
+func TestLoadOrCreateApp_ExistingConfigIgnoresMethodFlag(t *testing.T) {
+	// Given an existing game.json with launch_method "container"
+	d := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(d)
+	defer os.Chdir(orig)
+
+	gameDir := filepath.Join("games", "ExistingGame")
+	if err := os.MkdirAll(gameDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	content := `{"proton_version":"ge-proton-9","launch_method":"container","executable":"drive_c/game.exe","dependencies":{},"dll_overrides":{},"environment_vars":{}}`
+	if err := os.WriteFile(filepath.Join(gameDir, "game.json"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// When LoadOrCreateApp is called with defaultMethod "direct"
+	app, err := LoadOrCreateApp("games", "ExistingGame", "", Global{}, "direct")
+
+	// Then the existing config's launch method is returned unchanged
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if app.LaunchMethod != "container" {
+		t.Fatalf("expected existing LaunchMethod 'container' to be preserved, got %q", app.LaunchMethod)
 	}
 }
 
@@ -160,7 +240,7 @@ func TestLoadOrCreateApp_ReadsExistingConfig(t *testing.T) {
 	}
 
 	// When LoadOrCreateApp is called
-	app, err := LoadOrCreateApp("games", "TestGame", "", Global{})
+	app, err := LoadOrCreateApp("games", "TestGame", "", Global{}, "")
 
 	// Then it reads the existing config without overwriting it
 	if err != nil {

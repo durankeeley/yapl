@@ -1,4 +1,10 @@
 containers:
+  wine-builder:
+    build_directory: wine-builder
+    volumes:
+      - local: ./wine-builder/output
+        container: /output
+
   tfsec:
     image: aquasec/trivy:latest
     volumes:
@@ -27,6 +33,12 @@ tasks:
     run:
       container: golang
       command: env GOOS=linux GOARCH=amd64 go build -o "yapl" -buildvcs=false "./cmd/yapl"
+
+  build-wine:
+    description: "Builds a Wine version using WoW64 single-build. Pass version as: ./go-batect build-wine -- 11.7"
+    run:
+      container: wine-builder
+      command: "11.7"
 
   check-all:
     description: Runs all the code checks

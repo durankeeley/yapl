@@ -30,7 +30,7 @@ YAPL keeps things simple and organized.
 This command creates the folder structure (`./games/Game/`) and a default `game.json` for you.
 
 ```bash
-./yapl --game "Game" setup
+./yapl setup game "Game"
 ```
 
 ### 2\. Edit Your Configs
@@ -41,56 +41,58 @@ Next, open `games/Game/game.json` and tell it which versions you want this speci
 
 ### 3\. Install & Package Your Game
 
-Run the `setup` command again. This time, it will download all the components you just configured.
+Run `setup` again. This time it will download all the components you configured.
 
 ```bash
-./yapl --game "Game" setup
+./yapl setup game "Game"
 ```
 
-Now, install your game into the new Wine prefix (when you first create a wine prefix it will open explorer), which is located at `games/Game/prefix/`. Once it's installed, you can package the environment.
+Now install your game into the new Wine prefix (when you first create a Wine prefix it will open Explorer), which is located at `games/Game/prefix/`. Once it's installed, package the environment.
 
 ```bash
-# This creates a file like 'Game.tar.xz'
-./yapl --game "Game" package --format xz
+# Creates 'Game.tar.xz' (xz is the default)
+./yapl package "Game"
 ```
 
 ### 4\. Run the Game
 
-That's it\! Now you can launch the game with all its dependencies perfectly configured.
-
 ```bash
-./yapl --game "Game" run
+./yapl run "Game"
 ```
+
+YAPL automatically finds the game in `games/` or `apps/` — you never need to specify the type for `run`, `package`, or `info`.
 
 **Online deployment** — copy the `yapl` binary, `runner.json`, the shared `dependencies/` and `proton/` folders, and the archive. Then run:
 
 ```bash
-./yapl unpackage "Game.tar.xz"
+./yapl unpackage game "Game.tar.xz"
 ```
 
 **Offline / LAN deployment** — use `--bundle-deps` when packaging so all dependencies are included in the archive. On the target machine you only need `yapl` and the archive:
 
 ```bash
 # source machine
-./yapl --game "Game" package --format xz --bundle-deps --yes
+./yapl package "Game" --bundle-deps --yes
 
 # target machine (no internet needed)
-./yapl unpackage "Game.tar.xz"
-./yapl --game "Game" run
+./yapl unpackage game "Game.tar.xz"
+./yapl run "Game"
 ```
 
 -----
 
 ## Command Reference
 
-| Command     | Description                                                                  |
-| :---------- | :--------------------------------------------------------------------------- |
-| `setup`     | Creates the Wine prefix and downloads all defined dependencies.             |
-| `run`       | Launches the application using the configured environment.              |
-| `package`   | Compresses the entire game/app directory into a single `.tar` archive.    |
-| `unpackage` | Extracts one or more game/app archives into the appropriate directory (`games` or `apps`). |
-| `list`      | Lists all configured games and apps in the current working directory.       |
-| `info`      | Displays the resolved configuration and readiness status for a specific game or app. |
+| Command                        | Description                                                                      |
+| :----------------------------- | :------------------------------------------------------------------------------- |
+| `setup game\|app <name>`       | Creates the Wine prefix and downloads all defined dependencies.                  |
+| `run <name>`                   | Launches the application using the configured environment.                       |
+| `package <name>`               | Compresses the game/app directory into a `.tar` archive (default: `.tar.xz`).   |
+| `unpackage game\|app <files>`  | Extracts one or more archives into `games/` or `apps/`.                          |
+| `list`                         | Lists all configured games and apps in the current working directory.            |
+| `info <name>`                  | Displays the resolved configuration and readiness status.                        |
+
+For `run`, `package`, and `info`, YAPL automatically finds the entry in `games/` or `apps/` — you never need to specify the type. Only `setup` and `unpackage` require it because they need to know where to create or extract.
 
 ### `list` — discover what's installed
 
@@ -100,9 +102,9 @@ That's it\! Now you can launch the game with all its dependencies perfectly conf
 
 Output:
 ```
-TYPE  NAME       PROTON        METHOD  EXECUTABLE
-game  Doom       ge-proton-9   direct  drive_c/Games/Doom/doom.exe
-app   SteamCMD   system        direct  drive_c/steamcmd/steamcmd.exe
+TYPE  NAME       PROTON        METHOD     EXECUTABLE
+game  Doom       ge-proton-9   direct     drive_c/Games/Doom/doom.exe
+app   SteamCMD   system        container  drive_c/steamcmd/steamcmd.exe
 ```
 
 `list` scans `games/` and `apps/` and prints a tab-separated summary. Pipe to `column -t` for aligned columns.
@@ -110,7 +112,7 @@ app   SteamCMD   system        direct  drive_c/steamcmd/steamcmd.exe
 ### `info` — check readiness before a LAN event
 
 ```bash
-./yapl --game "Doom" info
+./yapl info "Doom"
 ```
 
 Output:
@@ -131,14 +133,14 @@ Executable:    drive_c/Games/Doom/doom.exe
 Bundle Proton and all configured dependencies inside the archive so the target machine needs no internet access:
 
 ```bash
-./yapl --game "Doom" package --format xz --bundle-deps
+./yapl package "Doom" --bundle-deps
 # Warning: bundled package will be approximately 4.2 GB. Continue? [y/N]: y
 ```
 
 On the target machine, just run `yapl unpackage` as normal — Proton and dependencies are installed automatically from the bundle:
 
 ```bash
-./yapl unpackage Doom.tar.xz
+./yapl unpackage game Doom.tar.xz
 # -> Installing bundled 'ge-proton-9'...
 # -> Installing bundled runner.json...
 ```
@@ -176,10 +178,10 @@ Add a `"winetricks"` array to `game.json` to install Windows redistributables in
 
 | Flag               | Description                                                                                                    |
 | :----------------- | :------------------------------------------------------------------------------------------------------------- |
-| `--game <name>`    | Specifies the target game directory within `./games/`.                                                        |
-| `--app <name>`     | Specifies the target app directory within `./apps/`.                                                          |
+| `--config <file>`  | Use a custom config file name (e.g. `mod-a.json`) instead of `game.json` / `app.json`.                       |
+| `--method <type>`  | Set the launch method (`direct`, `container`, `umu`) when `setup` creates a new config. Ignored if the config file already exists. |
 | `--upgrade-proton` | Forces a re-download of the configured Proton version, even if it already exists.                             |
-| `--format <type>`  | Sets the compression format for `package`. Options: `gz`, `xz`, `zst`. (Default: `gz`).                 |
+| `--format <type>`  | Compression format for `package`. Options: `gz`, `xz`, `zst`. (Default: `xz`).                              |
 | `--bundle-deps`    | Bundles Proton and dependencies into the package for offline deployment. Use with `package`.                 |
 | `--yes`            | Skips confirmation prompts (e.g. the size warning for `--bundle-deps`).                                      |
 | `--debug`          | Enables verbose logging from Proton and DXVK (`PROTON_LOG=1`, etc.).                                        |

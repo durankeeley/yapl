@@ -81,7 +81,7 @@ func LoadOrCreateGlobal(path string) (Global, error) {
 	return defaultCfg, nil
 }
 
-func LoadOrCreateApp(appType, appName, configName string, globalCfg Global) (App, error) {
+func LoadOrCreateApp(appType, appName, configName string, globalCfg Global, defaultMethod string) (App, error) {
 	appDir := filepath.Join(appType, appName)
 
 	var configFileName string
@@ -115,12 +115,24 @@ func LoadOrCreateApp(appType, appName, configName string, globalCfg Global) (App
 		break
 	}
 
+	firstRuntime := ""
+	for key := range globalCfg.RuntimeVersions {
+		firstRuntime = key
+		break
+	}
+
+	launchMethod := "container"
+	if defaultMethod != "" {
+		launchMethod = defaultMethod
+	}
+
 	defaultCfg := App{
-		ProtonVersion: firstProton,
-		LaunchMethod:  "direct",
-		Executable:    "drive_c/windows/explorer.exe",
-		LaunchArgs:    []string{},
-		Winetricks:    []string{},
+		ProtonVersion:  firstProton,
+		RuntimeVersion: firstRuntime,
+		LaunchMethod:   launchMethod,
+		Executable:     "drive_c/windows/explorer.exe",
+		LaunchArgs:     []string{},
+		Winetricks:     []string{},
 	}
 
 	if err := writeJSONFile(configPath, defaultCfg); err != nil {

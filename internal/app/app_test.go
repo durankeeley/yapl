@@ -53,6 +53,80 @@ func chdir(t *testing.T, dir string) {
 	t.Cleanup(func() { os.Chdir(orig) })
 }
 
+// --- Find ---
+
+func TestFind_ReturnsGamesWhenOnlyInGames(t *testing.T) {
+	// Given a game entry in games/ but nothing in apps/
+	d := t.TempDir()
+	chdir(t, d)
+	writeGameConfig(t, d, "Doom", config.App{ProtonVersion: "ge9", Executable: "drive_c/doom.exe"})
+
+	// When Find is called with the game name
+	appType, appName, err := Find("Doom")
+
+	// Then it returns "games" and the name with no error
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if appType != "games" || appName != "Doom" {
+		t.Fatalf("expected games/Doom, got %s/%s", appType, appName)
+	}
+}
+
+func TestFind_ReturnsAppsWhenOnlyInApps(t *testing.T) {
+	// Given an app entry in apps/ but nothing in games/
+	d := t.TempDir()
+	chdir(t, d)
+	writeAppConfig(t, d, "SteamCMD", config.App{ProtonVersion: "system", Executable: "drive_c/steamcmd.exe"})
+
+	// When Find is called with the app name
+	appType, appName, err := Find("SteamCMD")
+
+	// Then it returns "apps" and the name with no error
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if appType != "apps" || appName != "SteamCMD" {
+		t.Fatalf("expected apps/SteamCMD, got %s/%s", appType, appName)
+	}
+}
+
+func TestFind_ErrorsWhenNotFound(t *testing.T) {
+	// Given an empty working directory (no games/ or apps/)
+	d := t.TempDir()
+	chdir(t, d)
+
+	// When Find is called with a name that doesn't exist
+	_, _, err := Find("Ghost")
+
+	// Then it returns an error mentioning the name
+	if err == nil {
+		t.Fatal("expected an error for a missing entry but got nil")
+	}
+	if !strings.Contains(err.Error(), "Ghost") {
+		t.Fatalf("expected error to mention the missing name, got: %v", err)
+	}
+}
+
+func TestFind_ErrorsWhenPresentInBoth(t *testing.T) {
+	// Given the same name in both games/ and apps/ (ambiguous)
+	d := t.TempDir()
+	chdir(t, d)
+	writeGameConfig(t, d, "Ambiguous", config.App{ProtonVersion: "ge9", Executable: "drive_c/game.exe"})
+	writeAppConfig(t, d, "Ambiguous", config.App{ProtonVersion: "ge9", Executable: "drive_c/game.exe"})
+
+	// When Find is called
+	_, _, err := Find("Ambiguous")
+
+	// Then it returns an error indicating the ambiguity
+	if err == nil {
+		t.Fatal("expected an error for an ambiguous name but got nil")
+	}
+	if !strings.Contains(err.Error(), "Ambiguous") {
+		t.Fatalf("expected error to mention the name, got: %v", err)
+	}
+}
+
 // --- ListAll ---
 
 func TestListAll_PrintsAllConfiguredTitles(t *testing.T) {
