@@ -69,6 +69,29 @@ func (a *App) Setup() error {
 	return nil
 }
 
+// Find searches games/ and apps/ for a named entry and returns its type ("games" or "apps").
+// It returns an error if the name is not found or exists in both directories.
+func Find(name string) (appType, appName string, err error) {
+	inGames := fileExistsAt(filepath.Join("games", name, "game.json"))
+	inApps := fileExistsAt(filepath.Join("apps", name, "app.json"))
+
+	switch {
+	case inGames && inApps:
+		return "", "", fmt.Errorf("'%s' exists in both games/ and apps/; specify type: 'setup game %s' or 'setup app %s'", name, name, name)
+	case inGames:
+		return "games", name, nil
+	case inApps:
+		return "apps", name, nil
+	default:
+		return "", "", fmt.Errorf("'%s' not found in games/ or apps/", name)
+	}
+}
+
+func fileExistsAt(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 // ListAll scans the games/ and apps/ directories and writes a tab-separated summary to w.
 func ListAll(w io.Writer) error {
 	fmt.Fprintln(w, "TYPE\tNAME\tPROTON\tMETHOD\tEXECUTABLE")

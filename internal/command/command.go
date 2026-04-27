@@ -15,7 +15,12 @@ import (
 )
 
 // InitializePrefix creates and sets up a new Wine prefix.
-// It detects both flat (YAPL) and pfx/-subdirectory (Lutris/raw Proton) prefix layouts.
+// The initialization strategy is chosen based on launch_method:
+//   - "direct": uses wine64/wine from the Proton build via wineboot (no Proton script needed)
+//   - "container" / "umu": uses the Proton script (creates pfx/ layout, then restructures)
+//   - "system": uses the system-installed wine binary
+//
+// It also detects and migrates Lutris-style pfx/-subdirectory layouts.
 func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Global, debug bool) error {
 	absPrefix, err := fs.GetAbsolutePath(prefixPath)
 	if err != nil {
@@ -37,6 +42,18 @@ func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Glo
 		return initializePrefixWithSystemWine(absPrefix, appCfg, debug)
 	}
 
+	if appCfg.LaunchMethod == "direct" {
+		return initializePrefixWithProtonWine(absPrefix, prefixPath, appCfg, globalCfg, debug)
+	}
+
+	return initializePrefixWithProtonScript(absPrefix, prefixPath, appCfg, globalCfg, debug)
+}
+
+// initializePrefixWithProtonWine creates a Wine prefix using wine64/wine from a Proton
+// distribution, bypassing the Proton script. Used for "direct" launch method.
+func initializePrefixWithProtonWine(absPrefix, prefixPath string, appCfg config.App, globalCfg config.Global, debug bool) error {
+	fmt.Println("-> Initializing Wine prefix directly (using wine64, bypassing Proton script)...")
+
 	protonVersionInfo, err := getProtonInfo(appCfg, globalCfg)
 	if err != nil {
 		return err
@@ -46,7 +63,66 @@ func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Glo
 		return fmt.Errorf("could not resolve proton base path: %w", err)
 	}
 
+	wineExecutablePath, err := getWineExecutablePath(protonBasePath)
+	if err != nil {
+		return err
+	}
+
+	env := os.Environ()
+
+	var ldPaths []string
+	for _, component := range protonVersionInfo.LDLibraryPathComponents {
+		fullPath := filepath.Join(protonBasePath, component)
+		if _, err := os.Stat(fullPath); err == nil {
+			ldPaths = append(ldPaths, fullPath)
+		}
+	}
+	if existing := os.Getenv("LD_LIBRARY_PATH"); existing != "" {
+		ldPaths = append(ldPaths, existing)
+	}
+	if len(ldPaths) > 0 {
+		env = append(env, "LD_LIBRARY_PATH="+strings.Join(ldPaths, ":"))
+	}
+
+	existingPath := os.Getenv("PATH")
+	env = append(env, "PATH="+strings.Join([]string{
+		filepath.Join(protonBasePath, "files", "bin"),
+		filepath.Join(protonBasePath, "dist", "bin"),
+		filepath.Join(protonBasePath, "bin"),
+		existingPath,
+	}, ":"))
+	env = append(env, "WINEPREFIX="+absPrefix, "WINEARCH=win64")
+	if debug {
+		env = append(env, "WINEDEBUG=+all")
+	}
+
+	cmd := exec.Command(wineExecutablePath, "wineboot", "--init")
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("Wine prefix initialization failed: %w", err)
+	}
+
+	fmt.Println("-> Prefix created. Launching file explorer for application installation...")
+	explorerCfg := appCfg
+	explorerCfg.Executable = "drive_c/windows/explorer.exe"
+	return RunDirectly(prefixPath, explorerCfg, globalCfg, false, debug)
+}
+
+// initializePrefixWithProtonScript creates a Wine prefix using the Proton wrapper script.
+// Used for "container" and "umu" launch methods.
+func initializePrefixWithProtonScript(absPrefix, prefixPath string, appCfg config.App, globalCfg config.Global, debug bool) error {
 	fmt.Println("-> Initializing Wine prefix using the proton script...")
+
+	protonVersionInfo, err := getProtonInfo(appCfg, globalCfg)
+	if err != nil {
+		return err
+	}
+	protonBasePath, err := filepath.Abs(getProtonPath(appCfg.ProtonVersion, protonVersionInfo))
+	if err != nil {
+		return fmt.Errorf("could not resolve proton base path: %w", err)
+	}
 
 	protonScriptPath, err := getProtonScriptPath(appCfg, globalCfg)
 	if err != nil {
@@ -55,9 +131,9 @@ func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Glo
 	if _, err := os.Stat(protonScriptPath); os.IsNotExist(err) {
 		return fmt.Errorf("could not find 'proton' script at %s", protonScriptPath)
 	}
+
 	initCmd := exec.Command(protonScriptPath, "run", "cmd", "/c", "echo", "Initializing prefix...")
 	initCmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, false)
-
 	if err := initCmd.Run(); err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			log.Printf("-> Prefix creation output:\n%s", string(exitError.Stderr))
@@ -72,10 +148,6 @@ func InitializePrefix(prefixPath string, appCfg config.App, globalCfg config.Glo
 	fmt.Println("-> Prefix created. Launching file explorer for application installation...")
 	explorerCfg := appCfg
 	explorerCfg.Executable = "drive_c/windows/explorer.exe"
-
-	if appCfg.LaunchMethod == "direct" {
-		return RunDirectly(prefixPath, explorerCfg, globalCfg, false, debug)
-	}
 	return RunInContainer(prefixPath, explorerCfg, globalCfg, debug)
 }
 
