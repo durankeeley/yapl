@@ -11,6 +11,13 @@ func MustCreateDirectory(p string) error {
 	return os.MkdirAll(p, 0755)
 }
 
+// GetAbsolutePath returns the absolute path for p, or an error.
+func GetAbsolutePath(p string) (string, error) {
+	return filepath.Abs(p)
+}
+
+// MustGetAbsolutePath returns the absolute path and fatals on error.
+// Deprecated: prefer GetAbsolutePath and handle the error explicitly.
 func MustGetAbsolutePath(p string) string {
 	abs, err := filepath.Abs(p)
 	if err != nil {
@@ -59,22 +66,42 @@ func CopyFile(src, dst string) error {
 	return os.Chmod(dst, info.Mode())
 }
 
+// CopyDir recursively copies src to dst, preserving symlinks.
 func CopyDir(src, dst string) error {
 	if err := os.MkdirAll(dst, 0755); err != nil {
 		return err
 	}
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		info, err := os.Lstat(srcPath)
 		if err != nil {
 			return err
 		}
-		relPath, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
+
+		switch {
+		case info.Mode()&os.ModeSymlink != 0:
+			target, err := os.Readlink(srcPath)
+			if err != nil {
+				return err
+			}
+			if err := os.Symlink(target, dstPath); err != nil {
+				return err
+			}
+		case info.IsDir():
+			if err := CopyDir(srcPath, dstPath); err != nil {
+				return err
+			}
+		default:
+			if err := CopyFile(srcPath, dstPath); err != nil {
+				return err
+			}
 		}
-		dstPath := filepath.Join(dst, relPath)
-		if info.IsDir() {
-			return os.MkdirAll(dstPath, info.Mode())
-		}
-		return CopyFile(path, dstPath)
-	})
+	}
+	return nil
 }

@@ -51,7 +51,6 @@ type App struct {
 	LaunchMethod    string            `json:"launch_method,omitempty"`
 	Executable      string            `json:"executable"`
 	SteamAppID      string            `json:"steam_app_id,omitempty"`
-	WineArch        string            `json:"wine_arch,omitempty"`
 	LaunchArgs      []string          `json:"launch_args,omitempty"`
 	Winetricks      []string          `json:"winetricks,omitempty"`
 	UMUOptions      UMUOptions        `json:"umu_options,omitempty"`

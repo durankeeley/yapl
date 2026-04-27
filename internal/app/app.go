@@ -58,7 +58,9 @@ func (a *App) Setup() error {
 		}
 	}
 	fmt.Println("\n✅ Setup complete!")
-	fmt.Printf("➡️ If you haven't already, install your application into the prefix at '%s'\n", fs.MustGetAbsolutePath(a.PrefixPath))
+	if absPath, err := fs.GetAbsolutePath(a.PrefixPath); err == nil {
+		fmt.Printf("➡️ If you haven't already, install your application into the prefix at '%s'\n", absPath)
+	}
 	return nil
 }
 
