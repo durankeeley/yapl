@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"yapl/internal/app"
 	"yapl/internal/archive"
@@ -22,7 +23,10 @@ func main() {
 	debugMode := flag.Bool("debug", false, "Enable verbose Proton logging for debugging.")
 	isSteamPrefix := flag.Bool("steam", false, "Run as a Steam client prefix, ignoring the configured executable.")
 	setupMethod := flag.String("method", "", "Launch method for a new config created by setup: direct, container, or umu.")
-	flag.Parse()
+	// Go's flag package stops at the first non-flag argument, so flags placed after
+	// positional args (e.g. "yapl package game --bundle-deps") are never parsed.
+	// Reorder args to move all flags before positional args before calling Parse.
+	flag.CommandLine.Parse(reorderArgs(os.Args[1:]))
 
 	if *setupMethod != "" && *setupMethod != "direct" && *setupMethod != "container" && *setupMethod != "umu" {
 		log.Fatalf("❌ Invalid --method %q. Must be one of: direct, container, umu.", *setupMethod)
@@ -133,6 +137,41 @@ func initializeApp(appType, appName, configName, method string, force, debug, st
 		return nil, fmt.Errorf("could not load or create app config: %w", err)
 	}
 	return app.New(appType, appName, force, debug, steam, globalCfg, appCfg), nil
+}
+
+// reorderArgs moves all flag arguments (and their values) before positional
+// arguments so that flag.Parse stops at the right place regardless of where
+// the user placed the flags on the command line.
+func reorderArgs(args []string) []string {
+	var flagArgs, positionalArgs []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			positionalArgs = append(positionalArgs, args[i:]...)
+			break
+		}
+		if !strings.HasPrefix(arg, "-") {
+			positionalArgs = append(positionalArgs, arg)
+			continue
+		}
+		flagArgs = append(flagArgs, arg)
+		// If this flag doesn't embed its value with "=", peek at the next arg.
+		// If the flag is not boolean and the next arg is not itself a flag,
+		// treat the next arg as the flag's value.
+		if !strings.Contains(arg, "=") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			flagName := strings.TrimLeft(arg, "-")
+			if f := flag.Lookup(flagName); f != nil && !isBoolFlag(f) {
+				i++
+				flagArgs = append(flagArgs, args[i])
+			}
+		}
+	}
+	return append(flagArgs, positionalArgs...)
+}
+
+func isBoolFlag(f *flag.Flag) bool {
+	bf, ok := f.Value.(interface{ IsBoolFlag() bool })
+	return ok && bf.IsBoolFlag()
 }
 
 func handleUnpackage() {

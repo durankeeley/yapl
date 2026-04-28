@@ -84,13 +84,25 @@ func initializePrefixWithProtonWine(absPrefix, prefixPath string, appCfg config.
 		env = append(env, "LD_LIBRARY_PATH="+strings.Join(ldPaths, ":"))
 	}
 
-	existingPath := os.Getenv("PATH")
-	env = append(env, "PATH="+strings.Join([]string{
-		filepath.Join(protonBasePath, "files", "bin"),
-		filepath.Join(protonBasePath, "dist", "bin"),
-		filepath.Join(protonBasePath, "bin"),
-		existingPath,
-	}, ":"))
+	env = append(env, "PATH="+strings.Join(append(wineBinPaths(protonBasePath), os.Getenv("PATH")), ":"))
+
+	var wineDllPaths []string
+	for _, component := range protonVersionInfo.WineDllPathComponents {
+		fullPath := filepath.Join(protonBasePath, component)
+		if _, err := os.Stat(fullPath); err == nil {
+			wineDllPaths = append(wineDllPaths, fullPath)
+		}
+	}
+	if len(wineDllPaths) > 0 {
+		env = append(env, "WINEDLLPATH="+strings.Join(wineDllPaths, ":"))
+	}
+
+	// Standalone Wine builds compiled with --prefix=/usr hardcode their loader path.
+	// Override so wine finds its own loader instead of the system one.
+	if loaderPath := filepath.Join(protonBasePath, "usr", "lib", "wine", "x86_64-unix", "wine"); fileExists(loaderPath) {
+		env = append(env, "WINELOADER="+loaderPath)
+	}
+
 	env = append(env, "WINEPREFIX="+absPrefix, "WINEARCH=win64")
 	if debug {
 		env = append(env, "WINEDEBUG=+all")
@@ -104,10 +116,8 @@ func initializePrefixWithProtonWine(absPrefix, prefixPath string, appCfg config.
 		return fmt.Errorf("Wine prefix initialization failed: %w", err)
 	}
 
-	fmt.Println("-> Prefix created. Launching file explorer for application installation...")
-	explorerCfg := appCfg
-	explorerCfg.Executable = "drive_c/windows/explorer.exe"
-	return RunDirectly(prefixPath, explorerCfg, globalCfg, false, debug)
+	fmt.Println("-> Prefix created (direct method). Copy your game files into the prefix or install via 'yapl run'.")
+	return nil
 }
 
 // initializePrefixWithProtonScript creates a Wine prefix using the Proton wrapper script.
@@ -385,10 +395,13 @@ func buildProtonEnv(absPrefix, protonBasePath string, appCfg config.App, vinfo c
 		env = append(env, "WINEDLLPATH="+strings.Join(newWineDllPaths, ":"))
 	}
 
-	existingPath := os.Getenv("PATH")
-	protonBin := filepath.Join(protonBasePath, "bin")
-	protonDistBin := filepath.Join(protonBasePath, "dist", "bin")
-	env = append(env, "PATH="+strings.Join([]string{protonBin, protonDistBin, existingPath}, ":"))
+	env = append(env, "PATH="+strings.Join(append(wineBinPaths(protonBasePath), os.Getenv("PATH")), ":"))
+
+	// Standalone Wine builds compiled with --prefix=/usr hardcode their loader path.
+	// Override so wine finds its own loader instead of the system one.
+	if loaderPath := filepath.Join(protonBasePath, "usr", "lib", "wine", "x86_64-unix", "wine"); fileExists(loaderPath) {
+		env = append(env, "WINELOADER="+loaderPath)
+	}
 
 	// WoW64 in Wine 11+ handles 32-bit transparently — always win64.
 	env = append(env, "WINEARCH=win64")
@@ -437,7 +450,6 @@ func executeCommand(cmd *exec.Cmd) error {
 }
 
 func restructureProtonPrefix(absPrefix string) error {
-	fmt.Println("-> Restructuring prefix to standard layout...")
 	pfxDir := filepath.Join(absPrefix, "pfx")
 	info, err := os.Lstat(pfxDir)
 	if os.IsNotExist(err) {
@@ -450,6 +462,7 @@ func restructureProtonPrefix(absPrefix string) error {
 	if info.Mode()&os.ModeSymlink != 0 {
 		return nil
 	}
+	fmt.Println("-> Restructuring prefix to standard layout...")
 
 	files, err := os.ReadDir(pfxDir)
 	if err != nil {
@@ -489,6 +502,29 @@ func buildDllOverridesString(overrides map[string]string) string {
 	return strings.Join(parts, ";")
 }
 
+// wineBinPaths returns all existing bin directories for a given Proton or Wine base path,
+// covering both Proton layouts (files/bin, dist/bin, bin) and standard Wine (usr/bin).
+func wineBinPaths(protonBasePath string) []string {
+	candidates := []string{
+		filepath.Join(protonBasePath, "files", "bin"),
+		filepath.Join(protonBasePath, "dist", "bin"),
+		filepath.Join(protonBasePath, "bin"),
+		filepath.Join(protonBasePath, "usr", "bin"),
+	}
+	var found []string
+	for _, p := range candidates {
+		if fileExists(p) {
+			found = append(found, p)
+		}
+	}
+	return found
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 func getProtonInfo(appCfg config.App, globalCfg config.Global) (config.VersionInfo, error) {
 	vinfo, ok := globalCfg.ProtonVersions[appCfg.ProtonVersion]
 	if !ok {
@@ -512,13 +548,15 @@ func getProtonScriptPath(appCfg config.App, globalCfg config.Global) (string, er
 	return filepath.Join(getProtonPath(appCfg.ProtonVersion, vinfo), "proton"), nil
 }
 
-// getWineExecutablePath finds wine64 (or wine as fallback) within a Proton distribution.
-// Wine 11+ WoW64 mode handles 32-bit apps transparently — only a 64-bit binary is needed.
+// getWineExecutablePath finds wine64 (or wine as fallback) within a Proton or standalone Wine
+// distribution. Checks both Proton layouts (files/bin, dist/bin, bin) and the standard
+// Wine install layout (usr/bin).
 func getWineExecutablePath(protonBasePath string) (string, error) {
 	possibleBasePaths := []string{
 		filepath.Join(protonBasePath, "files", "bin"),
 		filepath.Join(protonBasePath, "dist", "bin"),
 		filepath.Join(protonBasePath, "bin"),
+		filepath.Join(protonBasePath, "usr", "bin"),
 	}
 
 	for _, binName := range []string{"wine64", "wine"} {
