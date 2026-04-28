@@ -1,4 +1,4 @@
-FROM debian:bookworm
+FROM debian:trixie
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -10,11 +10,13 @@ RUN echo 'path-exclude=/usr/share/doc/*' > /etc/dpkg/dpkg.cfg.d/99-exclude-cruft
 RUN dpkg --add-architecture i386 && \
     apt-get update && apt-get install -y --no-install-recommends \
     \
-    # Native compilers (ELF host binaries + -m32 for 32-bit satellite build).
-    # MinGW cross-compilers (CROSSCC) build all PE DLLs — no clang needed.
+    # Native compilers (ELF host binaries).
+    # GCC MinGW cross-compilers are kept for Wine <9 legacy dual-build.
+    # llvm-mingw (below) handles all PE DLL cross-compilation for Wine 9+.
     gcc gcc-multilib g++ g++-multilib \
     gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 \
     g++-mingw-w64-x86-64 g++-mingw-w64-i686 \
+    clang lld llvm \
     \
     # Build tools
     git make flex bison autoconf automake libtool pkg-config \
@@ -34,7 +36,7 @@ RUN dpkg --add-architecture i386 && \
     libavutil-dev libavutil-dev:i386 \
     libswresample-dev libswresample-dev:i386 \
     libswscale-dev libswscale-dev:i386 \
-    libv4l-dev \
+    libv4l-dev libv4l-dev:i386 \
     \
     # GStreamer (Wine media backend)
     libgstreamer1.0-dev \
@@ -57,6 +59,7 @@ RUN dpkg --add-architecture i386 && \
     libxi-dev libxi-dev:i386 \
     libxinerama-dev libxinerama-dev:i386 \
     libxkbcommon-dev libxkbcommon-dev:i386 \
+    libxkbregistry-dev \
     libxrandr-dev libxrandr-dev:i386 \
     libxrender-dev libxrender-dev:i386 \
     libxxf86vm-dev libxxf86vm-dev:i386 \
@@ -86,9 +89,23 @@ RUN dpkg --add-architecture i386 && \
     \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# ccache wraps all compilers (gcc, x86_64-w64-mingw32-gcc, i686-w64-mingw32-gcc, etc.)
-# transparently via PATH symlinks in /usr/lib/ccache/.
-ENV PATH="/usr/lib/ccache:${PATH}"
+# llvm-mingw 20251007 (LLVM 19) provides Clang-based i686/x86_64-w64-mingw32
+# cross-compilers required for --enable-archs=i386,x86_64 WoW64 single-build.
+# Wine configure detects -target/-fuse-ld=lld support and enables the mixed
+# i386+x86_64 COFF path in dlls/wow64/syscall.c.
+# LLVM 20+ (20260421+) introduced i386=1 predefinition and stricter .seh_*
+# restrictions that break this; 20251007 matches Wine's own CI image.
+# Note: Wine CI uses this version for arm64; on amd64 we opt into it for the
+# superior --enable-archs single-process WoW64 (what Valve/Proton uses).
+ARG LLVM_MINGW_VERSION=20251007
+RUN wget -q "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64.tar.xz" \
+    && tar -xf "llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64.tar.xz" -C /opt \
+    && rm "llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64.tar.xz"
+
+# llvm-mingw before /usr/lib/ccache: ensures i686-w64-mingw32-gcc resolves to
+# llvm-mingw's clang symlink rather than gcc-mingw-w64's GCC.
+# /usr/lib/ccache wraps native compilers (gcc, clang) transparently.
+ENV PATH="/opt/llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64/bin:/usr/lib/ccache:${PATH}"
 
 WORKDIR /build
 
