@@ -97,11 +97,7 @@ func initializePrefixWithProtonWine(absPrefix, prefixPath string, appCfg config.
 		env = append(env, "WINEDLLPATH="+strings.Join(wineDllPaths, ":"))
 	}
 
-	// Standalone Wine builds compiled with --prefix=/usr hardcode their loader path.
-	// Override so wine finds its own loader instead of the system one.
-	if loaderPath := filepath.Join(protonBasePath, "usr", "lib", "wine", "x86_64-unix", "wine"); fileExists(loaderPath) {
-		env = append(env, "WINELOADER="+loaderPath)
-	}
+	env = appendStandaloneWineEnv(env, protonBasePath)
 
 	env = append(env, "WINEPREFIX="+absPrefix, "WINEARCH=win64")
 	if debug {
@@ -256,6 +252,10 @@ func RunDirectly(prefixPath string, appCfg config.App, globalCfg config.Global, 
 	cmd := exec.Command(wineExecutablePath, args...)
 	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
 
+	// A stale wineserver from a previous run (possibly a different Wine version) will
+	// cause a protocol version mismatch. Kill it so wine starts a fresh one.
+	killStaleWineserver(protonBasePath, cmd.Env)
+
 	return executeCommand(cmd)
 }
 
@@ -396,12 +396,7 @@ func buildProtonEnv(absPrefix, protonBasePath string, appCfg config.App, vinfo c
 	}
 
 	env = append(env, "PATH="+strings.Join(append(wineBinPaths(protonBasePath), os.Getenv("PATH")), ":"))
-
-	// Standalone Wine builds compiled with --prefix=/usr hardcode their loader path.
-	// Override so wine finds its own loader instead of the system one.
-	if loaderPath := filepath.Join(protonBasePath, "usr", "lib", "wine", "x86_64-unix", "wine"); fileExists(loaderPath) {
-		env = append(env, "WINELOADER="+loaderPath)
-	}
+	env = appendStandaloneWineEnv(env, protonBasePath)
 
 	// WoW64 in Wine 11+ handles 32-bit transparently — always win64.
 	env = append(env, "WINEARCH=win64")
@@ -518,6 +513,36 @@ func wineBinPaths(protonBasePath string) []string {
 		}
 	}
 	return found
+}
+
+// appendStandaloneWineEnv adds WINELOADER and WINESERVER overrides for standalone Wine
+// builds (e.g. wine-tkg) that were compiled with --prefix=/usr. Without these, wine finds
+// its loader and server via the hardcoded /usr path, picking up the system Wine instead.
+func appendStandaloneWineEnv(env []string, protonBasePath string) []string {
+	loaderPath := filepath.Join(protonBasePath, "usr", "lib", "wine", "x86_64-unix", "wine")
+	if abs, err := filepath.Abs(loaderPath); err == nil && fileExists(loaderPath) {
+		env = append(env, "WINELOADER="+abs)
+	}
+	serverPath := filepath.Join(protonBasePath, "usr", "bin", "wineserver")
+	if abs, err := filepath.Abs(serverPath); err == nil && fileExists(serverPath) {
+		env = append(env, "WINESERVER="+abs)
+	}
+	return env
+}
+
+// killStaleWineserver terminates any wineserver running against the prefix in env.
+// A stale server from a different Wine version causes protocol mismatch errors.
+// Uses the wineserver from the standalone wine layout (usr/bin/wineserver) if present.
+// Errors are silently ignored — no running server is a normal state.
+func killStaleWineserver(protonBasePath string, env []string) {
+	serverPath := filepath.Join(protonBasePath, "usr", "bin", "wineserver")
+	abs, err := filepath.Abs(serverPath)
+	if err != nil || !fileExists(abs) {
+		return
+	}
+	killCmd := exec.Command(abs, "-k")
+	killCmd.Env = env
+	killCmd.Run()
 }
 
 func fileExists(path string) bool {
