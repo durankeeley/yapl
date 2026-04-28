@@ -1,9 +1,20 @@
 containers:
   wine-builder:
-    build_directory: wine-builder
+    build: ./wine-builder
     volumes:
       - local: ./wine-builder/output
         container: /output
+      - local: ./wine-builder/ccache
+        container: /root/.ccache
+
+
+  wine-builder-v2:
+    build: ./wine-builder-v2
+    volumes:
+      - local: ./wine-builder-v2/output
+        container: /output
+      - local: ./wine-builder-v2/ccache
+        container: /root/.ccache
 
   tfsec:
     image: aquasec/trivy:latest
@@ -34,11 +45,145 @@ tasks:
       container: golang
       command: env GOOS=linux GOARCH=amd64 go build -o "yapl" -buildvcs=false "./cmd/yapl"
 
+  # ── wine-builder v1 (Kron4ek-optimised, GCC, debian:bookworm) ─────────
   build-wine:
-    description: "Builds a Wine version using WoW64 single-build. Pass version as: ./go-batect build-wine -- 11.7"
+    description: "v1: Builds the latest Wine (dual 64+32)"
+    run:
+      container: wine-builder
+      command: "latest"
+
+  build-wine-11.7:
+    description: "v1: Builds Wine 11.7 (dual 64+32)"
     run:
       container: wine-builder
       command: "11.7"
+
+  build-wine-11.7-staging:
+    description: "v1: Builds Wine 11.7 + wine-staging patches (dual 64+32)"
+    run:
+      container: wine-builder
+      command: "11.7-staging"
+
+  build-wine-11.7-staging-wow64:
+    description: "v1: Builds Wine 11.7 + wine-staging + WoW64 post-process"
+    run:
+      container: wine-builder
+      command: "11.7-staging-wow64"
+
+  build-wine-11.7-staging-tkg:
+    description: "v1: Builds Wine 11.7 + staging + tkg (classic dual 64+32, i386-unix stubs kept)"
+    run:
+      container: wine-builder
+      command: "11.7-staging-tkg"
+
+  build-wine-11.7-staging-tkg-wow64:
+    description: "v1: Builds Wine 11.7 + staging + tkg ntsync + WoW64 post-process"
+    run:
+      container: wine-builder
+      command: "11.7-staging-tkg-wow64"
+
+  build-wine-11.7-wow64:
+    description: "v1: Builds Wine 11.7 WoW64 (dual build + post-process: removes i386-unix ELF stubs)"
+    run:
+      container: wine-builder
+      command: "11.7-wow64"
+
+  build-wine-11.7-x86:
+    description: "v1: Builds Wine 11.7 standalone 32-bit (for 32-bit-only systems)"
+    run:
+      container: wine-builder
+      command: "11.7-x86"
+
+  build-wine-6.23:
+    description: "v1: Builds Wine 6.23 (dual 64+32)"
+    run:
+      container: wine-builder
+      command: "6.23"
+
+  build-wine-6.23-staging:
+    description: "v1: Builds Wine 6.23 + wine-staging patches (dual 64+32)"
+    run:
+      container: wine-builder
+      command: "6.23-staging"
+
+  build-wine-6.23-x86:
+    description: "v1: Builds Wine 6.23 standalone 32-bit"
+    run:
+      container: wine-builder
+      command: "6.23-x86"
+
+  build-wine-3.21:
+    description: "v1: Builds Wine 3.21 (legacy, dual 64+32)"
+    run:
+      container: wine-builder
+      command: "3.21"
+
+  build-wine-3.21-x86:
+    description: "v1: Builds Wine 3.21 standalone 32-bit (legacy)"
+    run:
+      container: wine-builder
+      command: "3.21-x86"
+
+  # ── wine-builder v2 (Valve/Proton approach, llvm-mingw, debian:trixie) ─
+  build-wine-v2:
+    description: "v2: Builds the latest Wine (WoW64 single-build for Wine 9+)"
+    run:
+      container: wine-builder-v2
+      command: "latest"
+
+  build-wine-v2-11.7:
+    description: "v2: Builds Wine 11.7 (--enable-archs WoW64 single-build)"
+    run:
+      container: wine-builder-v2
+      command: "11.7"
+
+  build-wine-v2-11.7-staging:
+    description: "v2: Builds Wine 11.7 + wine-staging (WoW64 single-build)"
+    run:
+      container: wine-builder-v2
+      command: "11.7-staging"
+
+  build-wine-v2-11.7-staging-tkg:
+    description: "v2: Builds Wine 11.7 + staging + tkg ntsync (WoW64 single-build)"
+    run:
+      container: wine-builder-v2
+      command: "11.7-staging-tkg"
+
+  build-wine-v2-10.9-staging-tkg:
+    description: "v2: Builds Wine 10.9 + staging + tkg (WoW64, pre-11.x arch, latest with staging tag)"
+    run:
+      container: wine-builder-v2
+      command: "10.9-staging-tkg"
+
+  build-wine-v2-10.20-staging-tkg:
+    description: "v2: Builds Wine 10.20 + staging + tkg (WoW64, pre-11.x arch, ntsync built-in)"
+    run:
+      container: wine-builder-v2
+      command: "10.20-staging-tkg"
+
+  build-wine-v2-10.20:
+    description: "v2: Builds Wine 10.20 plain (WoW64, pre-11.x arch, ntsync built-in)"
+    run:
+      container: wine-builder-v2
+      command: "10.20"
+
+  build-wine-v2-6.23:
+    description: "v2: Builds Wine 6.23 (dual 64+32 GCC build)"
+    run:
+      container: wine-builder-v2
+      command: "6.23"
+
+  build-wine-v2-6.23-staging:
+    description: "v2: Builds Wine 6.23 + wine-staging (dual 64+32 GCC build)"
+    run:
+      container: wine-builder-v2
+      command: "6.23-staging"
+
+  build-wine-v2-3.21:
+    description: "v2: Builds Wine 3.21 (legacy, dual 64+32 GCC build)"
+    run:
+      container: wine-builder-v2
+      command: "3.21"
 
   check-all:
     description: Runs all the code checks
