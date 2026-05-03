@@ -9,6 +9,50 @@ import (
 	"yapl/internal/config"
 )
 
+// --- PRD-21: writeSteamAppID helper ---
+
+func TestWriteSteamAppID_CreatesFileNextToExecutable(t *testing.T) {
+	// Given a prefix directory with the game's directory structure present
+	d := t.TempDir()
+	gameDir := filepath.Join(d, "drive_c", "games")
+	if err := os.MkdirAll(gameDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// When writeSteamAppID is called with a valid app ID
+	err := writeSteamAppID(d, "drive_c/games/game.exe", "12345")
+
+	// Then no error is returned
+	if err != nil {
+		t.Fatalf("writeSteamAppID returned unexpected error: %v", err)
+	}
+
+	// And steam_appid.txt is created next to the executable with the correct content
+	content, err := os.ReadFile(filepath.Join(gameDir, "steam_appid.txt"))
+	if err != nil {
+		t.Fatalf("expected steam_appid.txt to be created next to the executable: %v", err)
+	}
+	if string(content) != "12345" {
+		t.Fatalf("expected content '12345', got %q", string(content))
+	}
+}
+
+func TestWriteSteamAppID_SkipsWhenAppIDEmpty(t *testing.T) {
+	// Given a prefix directory with no subdirectories (so a write attempt would fail)
+	d := t.TempDir()
+
+	// When writeSteamAppID is called with an empty app ID
+	err := writeSteamAppID(d, "drive_c/game.exe", "")
+
+	// Then no error is returned and no file is created
+	if err != nil {
+		t.Fatalf("expected nil error for empty appID, got: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(d, "drive_c", "steam_appid.txt")); !os.IsNotExist(statErr) {
+		t.Error("expected no steam_appid.txt to be created when appID is empty")
+	}
+}
+
 // --- WINEARCH environment variable ---
 
 func TestBuildProtonEnv_AlwaysSetsWin64Arch(t *testing.T) {

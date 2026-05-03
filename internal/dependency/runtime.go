@@ -3,16 +3,18 @@ package dependency
 import (
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"yapl/internal/archive"
 	"yapl/internal/config"
 )
+
+var httpClient = &http.Client{Timeout: 30 * time.Minute}
 
 // EnsureRuntime checks if the Steam Linux Runtime is installed and up-to-date.
 func EnsureRuntime(appCfg config.App, globalCfg config.Global) error {
@@ -42,7 +44,7 @@ func EnsureRuntime(appCfg config.App, globalCfg config.Global) error {
 		var err error
 		updateNeeded, err = runtimeNeedsUpdate(runtimeDir, runtimeInfo.URL)
 		if err != nil {
-			log.Printf("⚠️  Could not check for runtime update, proceeding with local version: %v", err)
+			return fmt.Errorf("runtime version check failed: %w", err)
 		}
 	}
 
@@ -83,11 +85,15 @@ func runtimeNeedsUpdate(runtimeDir, runtimeURL string) (bool, error) {
 	parsedURL.Path = filepath.Dir(parsedURL.Path) + "/BUILD_ID.txt"
 	buildIDURL := parsedURL.String()
 
-	resp, err := http.Get(buildIDURL)
+	resp, err := httpClient.Get(buildIDURL)
 	if err != nil {
 		return false, fmt.Errorf("could not fetch remote BUILD_ID: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("GET %s: unexpected status %s", buildIDURL, resp.Status)
+	}
 
 	remoteVersion, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -120,11 +126,16 @@ func postInstallRuntimeFixup(runtimeDir, runtimeURL string) error {
 	parsedURL.Path = filepath.Dir(parsedURL.Path) + "/BUILD_ID.txt"
 	buildIDURL := parsedURL.String()
 
-	resp, err := http.Get(buildIDURL)
+	resp, err := httpClient.Get(buildIDURL)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GET %s: unexpected status %s", buildIDURL, resp.Status)
+	}
+
 	remoteVersion, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err

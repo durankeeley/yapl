@@ -11,7 +11,7 @@
 
 ## 1. Problem & Context
 
-All of YAPL's path resolution is relative to the current working directory — `proton/`, `games/`, `dependencies/`, `runner.json`. This means `yapl` must always be invoked from the deployment root directory. There is no way to run `yapl` from a different directory, e.g. `yapl --workdir /opt/games run --game Doom` or invoke it from a shell script in `/usr/local/bin`.
+All of YAPL's path resolution is relative to the current working directory — `proton/`, `games/`, `dependencies/`, `runner.json`. This means `yapl` must always be invoked from the deployment root directory. There is no way to run `yapl` from a different directory, e.g. `yapl --workdir /opt/games run Doom` or invoke it from a shell script in `/usr/local/bin`.
 
 * **Current State:** YAPL implicitly uses `os.Getwd()` (via relative paths) as the deployment root. No flag to override.
 * **Impact/Need:** Cannot create a desktop launcher or systemd service that calls `yapl` with an absolute path without wrapping it in `cd /deployment/root && yapl ...`.
@@ -41,7 +41,7 @@ All of YAPL's path resolution is relative to the current working directory — `
 * **Specifics:** Include a desktop launcher example:
   ```
   [Desktop Entry]
-  Exec=yapl --workdir /opt/lan-games --game Doom run
+  Exec=yapl --workdir /opt/lan-games run Doom
   ```
 
 ## 4. Execution & Milestones

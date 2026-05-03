@@ -238,12 +238,8 @@ func RunDirectly(prefixPath string, appCfg config.App, globalCfg config.Global, 
 	}
 	fmt.Printf("-> Found wine executable: %s\n", wineExecutablePath)
 
-	if appCfg.SteamAppID != "" && appCfg.SteamAppID != "0" {
-		fullExePath := filepath.Join(absPrefix, appCfg.Executable)
-		appIDPath := filepath.Join(filepath.Dir(fullExePath), "steam_appid.txt")
-		if err := os.WriteFile(appIDPath, []byte(appCfg.SteamAppID), 0644); err != nil {
-			log.Printf("⚠️  Warning: Failed to write steam_appid.txt: %v", err)
-		}
+	if err := writeSteamAppID(absPrefix, appCfg.Executable, appCfg.SteamAppID); err != nil {
+		return fmt.Errorf("failed to write steam_appid.txt: %w", err)
 	}
 
 	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
@@ -291,12 +287,8 @@ func RunInContainer(prefixPath string, appCfg config.App, globalCfg config.Globa
 		return fmt.Errorf("could not find 'proton' script. The 'container' method requires a full Proton build (like GE-Proton), not a Wine-only build")
 	}
 
-	if appCfg.SteamAppID != "" && appCfg.SteamAppID != "0" {
-		fullExePath := filepath.Join(absPrefix, appCfg.Executable)
-		appIDPath := filepath.Join(filepath.Dir(fullExePath), "steam_appid.txt")
-		if err := os.WriteFile(appIDPath, []byte(appCfg.SteamAppID), 0644); err != nil {
-			log.Printf("⚠️  Warning: Failed to write steam_appid.txt: %v", err)
-		}
+	if err := writeSteamAppID(absPrefix, appCfg.Executable, appCfg.SteamAppID); err != nil {
+		return fmt.Errorf("failed to write steam_appid.txt: %w", err)
 	}
 
 	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
@@ -433,6 +425,17 @@ func buildProtonEnv(absPrefix, protonBasePath string, appCfg config.App, vinfo c
 	}
 
 	return env
+}
+
+// writeSteamAppID writes the Steam app ID file next to the executable inside the Wine prefix.
+// It is a no-op when appID is empty or "0".
+func writeSteamAppID(absPrefix, executable, appID string) error {
+	if appID == "" || appID == "0" {
+		return nil
+	}
+	fullExePath := filepath.Join(absPrefix, executable)
+	appIDPath := filepath.Join(filepath.Dir(fullExePath), "steam_appid.txt")
+	return os.WriteFile(appIDPath, []byte(appID), 0644)
 }
 
 // --- Private Helpers ---
