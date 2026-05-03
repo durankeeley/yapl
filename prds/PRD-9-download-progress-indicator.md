@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** Medium
 **Size:** M
-**Sprint:** Backlog
+**Sprint:** 4 — Dependency & Package UX
 **Tags:** `feature`, `ux`, `download`, `archive`
 **Created:** 2026-04-27
 

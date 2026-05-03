@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** Medium
 **Size:** S
-**Sprint:** Backlog
+**Sprint:** 1 — Codebase Health
 **Tags:** `refactor`, `error-handling`, `coding-standards`
 **Created:** 2026-04-27
 
