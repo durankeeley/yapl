@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** High
 **Size:** S
-**Sprint:** Backlog
+**Sprint:** 3 — Validation & Deployment Flexibility
 **Tags:** `bugfix`, `config`, `ux`, `validation`
 **Created:** 2026-04-27
 

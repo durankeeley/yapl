@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** Medium
 **Size:** M
-**Sprint:** Backlog
+**Sprint:** 3 — Validation & Deployment Flexibility
 **Tags:** `feature`, `cli`, `portability`
 **Created:** 2026-04-27
 

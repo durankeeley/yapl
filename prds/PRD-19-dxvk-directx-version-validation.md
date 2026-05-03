@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** Medium
 **Size:** S
-**Sprint:** Backlog
+**Sprint:** 3 — Validation & Deployment Flexibility
 **Tags:** `bugfix`, `config`, `validation`, `dxvk`
 **Created:** 2026-04-27
 

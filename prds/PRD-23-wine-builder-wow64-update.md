@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** High
 **Size:** M
-**Sprint:** Backlog
+**Sprint:** 5 — Wine Builder Ecosystem
 **Tags:** `wine-builder`, `wow64`, `docker`, `refactor`
 **Created:** 2026-04-27
 

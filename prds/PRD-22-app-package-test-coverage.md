@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** Medium
 **Size:** M
-**Sprint:** Backlog
+**Sprint:** 1 — Codebase Health
 **Tags:** `testing`, `app`, `coverage`
 **Created:** 2026-04-27
 

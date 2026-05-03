@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** Medium
 **Size:** S
-**Sprint:** Backlog
+**Sprint:** 5 — Wine Builder Ecosystem
 **Tags:** `wine-builder`, `config`, `integration`, `feature`
 **Created:** 2026-04-27
 
@@ -27,7 +27,7 @@ Additionally, YAPL's `ensureProton` currently only supports two lookup modes: UR
   }
   ```
 * When `ensureProton` encounters a `local_archive` entry, extract the tarball to `proton/<version>/` using the existing `archive.Extract` logic, then mark it as done. Subsequent runs skip re-extraction (directory non-empty check).
-* Add a `yapl register-wine` (or `yapl add`) sub-command that writes the `runner.json` entry automatically after a wine builder run.
+* Add a `yapl add proton <name> <archive-path>` command that writes the `runner.json` entry automatically after a wine builder run.
 
 ## 3. Scope & Design Details
 
@@ -42,9 +42,13 @@ Additionally, YAPL's `ensureProton` currently only supports two lookup modes: UR
   3. Cache: if `proton/<version>/` is already non-empty, skip.
 * **Specifics:** Reuse `archive.Extract` — it already supports local file paths as source when `Source` does not start with `http`.
 
-### `yapl register-wine` command (or `yapl add`)
-* **Behavior/Rule:** `yapl add --name wine-11.7 --archive ./wine-builder/output/wine-11.7.tar.xz` adds a `local_archive` entry to `runner.json`.
-* **Specifics:** Read `runner.json`, add the entry, write back. Error if the name already exists.
+### `yapl add proton` command
+* **Behavior/Rule:** `yapl add proton <name> <archive-path>` adds a `local_archive` entry to `runner.json`.
+  ```bash
+  yapl add proton wine-11.7 ./wine-builder/output/wine-11.7.tar.xz
+  ```
+  Follows the established pattern of `yapl <verb> <resource-type> <name>` (same as `yapl setup game <name>`, `yapl unpackage game <file>`).
+* **Specifics:** Read `runner.json`, add the `proton_versions["wine-11.7"]` entry with `local_archive` set, write back. Error if the name already exists (user must use `--overwrite` to replace).
 
 ## 4. Execution & Milestones
 
@@ -52,7 +56,7 @@ Additionally, YAPL's `ensureProton` currently only supports two lookup modes: UR
 - [ ] Write failing test: `TestEnsureProton_SkipsExtractionIfAlreadyPresent`
 - [ ] Add `LocalArchive` to `config.VersionInfo`
 - [ ] Add local_archive handling in `ensureProton`
-- [ ] Implement `yapl add` command in `cmd/yapl/main.go` and `internal/app/app.go`
+- [ ] Implement `yapl add proton <name> <archive-path>` in `cmd/yapl/main.go` and `internal/app/app.go`
 - [ ] All tests pass
 - [ ] Mark Complete, move to `prds/done/`
 
@@ -62,7 +66,7 @@ Additionally, YAPL's `ensureProton` currently only supports two lookup modes: UR
 * `internal/config/config.go` — `LocalArchive` field in `VersionInfo`
 * `internal/dependency/dependency.go` — `ensureProton` local archive path
 * `internal/app/app.go` — `Add(name, archivePath string) error`
-* `cmd/yapl/main.go` — `case "add":`
+* `cmd/yapl/main.go` — `case "add":` dispatching on resource type `"proton"`
 
 ### Risks & Considerations
 * **`archive.Extract` with local source:** Confirm that `archive.Extract` already handles `file://` paths or bare filesystem paths. If it only handles HTTP, add a local-file branch.

@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** Medium
 **Size:** S
-**Sprint:** Backlog
+**Sprint:** 4 — Dependency & Package UX
 **Tags:** `feature`, `cli`, `dependencies`, `upgrade`
 **Created:** 2026-04-27
 

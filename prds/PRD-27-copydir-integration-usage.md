@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** Low
 **Size:** S
-**Sprint:** Backlog
+**Sprint:** 1 — Codebase Health
 **Tags:** `refactor`, `fs`, `dead-code`
 **Created:** 2026-04-27
 

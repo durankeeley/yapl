@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** High
 **Size:** S
-**Sprint:** Backlog
+**Sprint:** 2 — Reliability
 **Tags:** `bugfix`, `http`, `runtime`, `reliability`
 **Created:** 2026-04-27
 

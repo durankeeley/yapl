@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** Medium
 **Size:** S
-**Sprint:** Backlog
+**Sprint:** 2 — Reliability
 **Tags:** `bugfix`, `error-handling`, `command`
 **Created:** 2026-04-27
 
