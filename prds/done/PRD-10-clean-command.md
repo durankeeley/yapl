@@ -1,6 +1,6 @@
 # PRD-10 - `clean` Command
 
-**Status:** `[ ] Pending`
+**Status:** `[x] Complete`
 **Priority:** Medium
 **Size:** S
 **Sprint:** Backlog

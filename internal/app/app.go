@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"yapl/internal/archive"
 	"yapl/internal/command"
@@ -304,6 +305,102 @@ func bundleSize(a *App) (int64, error) {
 		})
 	}
 	return total, nil
+}
+
+// CleanTargets specifies which YAPL-managed directories to remove for a game or app.
+type CleanTargets struct {
+	Prefix bool
+	Proton bool
+	Deps   bool
+}
+
+// Clean removes the selected YAPL-managed directories for this app.
+// When yes is false the user is prompted to confirm before any deletion occurs.
+// Warnings about shared Proton versions are written to w.
+func (a *App) Clean(targets CleanTargets, yes bool, w io.Writer) error {
+	var paths []string
+
+	if targets.Prefix {
+		paths = append(paths, a.PrefixPath)
+	}
+	if targets.Proton && a.AppConfig.ProtonVersion != "" {
+		protonDir := filepath.Join("proton", a.AppConfig.ProtonVersion)
+		paths = append(paths, protonDir)
+	}
+	if targets.Deps {
+		if v := a.AppConfig.Dependencies.DXVKVersion; v != "" {
+			paths = append(paths, filepath.Join("dependencies", "dxvk", v))
+		}
+		if v := a.AppConfig.Dependencies.VKD3DVersion; v != "" {
+			paths = append(paths, filepath.Join("dependencies", "vkd3d", v))
+		}
+	}
+
+	if len(paths) == 0 {
+		fmt.Fprintln(w, "-> Nothing to clean.")
+		return nil
+	}
+
+	if targets.Proton {
+		a.warnIfProtonShared(w)
+	}
+
+	if !yes {
+		fmt.Fprintln(w, "The following paths will be deleted:")
+		for _, p := range paths {
+			fmt.Fprintf(w, "  %s\n", p)
+		}
+		fmt.Print("Delete the above? [y/N]: ")
+		var resp string
+		fmt.Scanln(&resp)
+		if resp != "y" && resp != "Y" {
+			return fmt.Errorf("clean cancelled")
+		}
+	}
+
+	for _, p := range paths {
+		if err := os.RemoveAll(p); err != nil {
+			return fmt.Errorf("remove %s: %w", p, err)
+		}
+		fmt.Fprintf(w, "-> Deleted %s\n", p)
+	}
+	return nil
+}
+
+// warnIfProtonShared prints a warning to w when another game or app shares the same Proton version.
+func (a *App) warnIfProtonShared(w io.Writer) {
+	dirs := []struct {
+		dir     string
+		cfgName string
+	}{
+		{"games", "game.json"},
+		{"apps", "app.json"},
+	}
+	for _, d := range dirs {
+		entries, err := os.ReadDir(d.dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !e.IsDir() || e.Name() == a.Name {
+				continue
+			}
+			cfgPath := filepath.Join(d.dir, e.Name(), d.cfgName)
+			data, err := os.ReadFile(cfgPath)
+			if err != nil {
+				continue
+			}
+			// Quick string check avoids importing config to avoid cycles.
+			if containsProtonVersion(data, a.AppConfig.ProtonVersion) {
+				fmt.Fprintf(w, "⚠️  Warning: '%s' also uses Proton version '%s'\n", e.Name(), a.AppConfig.ProtonVersion)
+			}
+		}
+	}
+}
+
+// containsProtonVersion does a quick check for the proton version key in raw JSON bytes.
+func containsProtonVersion(data []byte, version string) bool {
+	return len(version) > 0 && strings.Contains(string(data), `"`+version+`"`)
 }
 
 // Run prepares the environment and launches the application.
