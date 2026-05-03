@@ -119,6 +119,20 @@ func TestGetAbsolutePath_ReturnsAbsolutePathWithNoError(t *testing.T) {
 	}
 }
 
+func TestGetAbsolutePath_ReturnsAbsolutePathForRelativeInput(t *testing.T) {
+	// Given a relative path segment
+	// When GetAbsolutePath is called
+	abs, err := GetAbsolutePath("some/relative/path")
+
+	// Then it returns an absolute path with no error — GetAbsolutePath is the only authoritative function
+	if err != nil {
+		t.Fatalf("GetAbsolutePath returned an unexpected error: %v", err)
+	}
+	if !filepath.IsAbs(abs) {
+		t.Fatalf("expected absolute path for relative input, got: %q", abs)
+	}
+}
+
 // --- CopyDir ---
 
 func TestCopyDir_PreservesSymlinks(t *testing.T) {

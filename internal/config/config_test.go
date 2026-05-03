@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -251,5 +252,20 @@ func TestLoadOrCreateApp_ReadsExistingConfig(t *testing.T) {
 	}
 	if app.Executable != "drive_c/game.exe" {
 		t.Fatalf("expected executable 'drive_c/game.exe', got %q", app.Executable)
+	}
+}
+
+// --- VersionInfo struct shape (PRD-15) ---
+
+func TestVersionInfo_DoesNotContainPythonFields(t *testing.T) {
+	// Given the VersionInfo struct
+	vt := reflect.TypeOf(VersionInfo{})
+
+	// When we inspect its fields
+	// Then neither PythonHome nor PythonPath should exist
+	for _, name := range []string{"PythonHome", "PythonPath"} {
+		if _, ok := vt.FieldByName(name); ok {
+			t.Errorf("VersionInfo still has deprecated field %q — remove it from config.go", name)
+		}
 	}
 }

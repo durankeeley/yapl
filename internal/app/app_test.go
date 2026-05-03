@@ -495,3 +495,178 @@ func TestClean_AllDeletesPrefixProtonAndDeps(t *testing.T) {
 		}
 	}
 }
+
+// --- Setup (PRD-22) ---
+
+func TestSetup_ErrorWhenProtonVersionNotInRunnerJSON(t *testing.T) {
+	// Given a game config referencing a proton version that is absent from runner.json
+	d := t.TempDir()
+	chdir(t, d)
+
+	a := &App{
+		Type:   "games",
+		Name:   "Doom",
+		AppDir: "games/Doom",
+		AppConfig: config.App{
+			ProtonVersion: "nonexistent-proton",
+			LaunchMethod:  "direct",
+			Executable:    "drive_c/game.exe",
+		},
+		PrefixPath:   "games/Doom/prefix",
+		GlobalConfig: config.Global{ProtonVersions: map[string]config.VersionInfo{}},
+	}
+
+	// When Setup is called
+	err := a.Setup()
+
+	// Then it returns an error mentioning the missing proton version
+	if err == nil {
+		t.Fatal("expected an error when proton version is not in runner.json")
+	}
+	if !strings.Contains(err.Error(), "nonexistent-proton") {
+		t.Errorf("expected error to mention the missing version name, got: %v", err)
+	}
+}
+
+// --- Package (PRD-22) ---
+
+func TestPackage_ErrorWhenGameDirMissing(t *testing.T) {
+	// Given an App whose AppDir does not exist on disk
+	d := t.TempDir()
+	chdir(t, d)
+
+	a := &App{
+		Type:      "games",
+		Name:      "Ghost",
+		AppDir:    "games/Ghost",
+		AppConfig: config.App{ProtonVersion: "ge9", Executable: "drive_c/game.exe"},
+		PrefixPath: "games/Ghost/prefix",
+	}
+
+	// When Package is called
+	err := a.Package("gz", false, true)
+
+	// Then it returns an error
+	if err == nil {
+		t.Fatal("expected error when game directory does not exist")
+	}
+}
+
+func TestPackage_CreatesArchiveFile(t *testing.T) {
+	// Given a game directory with a game.json and a file
+	d := t.TempDir()
+	chdir(t, d)
+
+	gameDir := filepath.Join(d, "games", "Doom")
+	os.MkdirAll(gameDir, 0755)
+	os.WriteFile(filepath.Join(gameDir, "game.json"),
+		[]byte(`{"proton_version":"ge9","executable":"drive_c/game.exe","dependencies":{},"dll_overrides":{},"environment_vars":{}}`),
+		0644)
+	os.WriteFile(filepath.Join(gameDir, "README.txt"), []byte("hello"), 0644)
+
+	a := &App{
+		Type:      "games",
+		Name:      "Doom",
+		AppDir:    "games/Doom",
+		AppConfig: config.App{ProtonVersion: "ge9", Executable: "drive_c/game.exe"},
+		PrefixPath: "games/Doom/prefix",
+	}
+
+	// When Package is called without bundling deps
+	err := a.Package("gz", false, true)
+
+	// Then no error is returned
+	if err != nil {
+		t.Fatalf("unexpected error from Package: %v", err)
+	}
+
+	// And the archive is created in the working directory
+	if _, err := os.Stat("Doom.tar.gz"); err != nil {
+		t.Error("expected Doom.tar.gz to be created in the working directory")
+	}
+}
+
+// --- Package symlink preservation (PRD-27) ---
+
+func TestPackage_PreservesSymlinksInGameDirectory(t *testing.T) {
+	// Given a game directory containing a regular file and a symlink pointing to it
+	d := t.TempDir()
+	chdir(t, d)
+
+	gameDir := filepath.Join(d, "games", "Doom")
+	os.MkdirAll(gameDir, 0755)
+	os.WriteFile(filepath.Join(gameDir, "game.json"),
+		[]byte(`{"proton_version":"fake-proton","executable":"drive_c/game.exe","dependencies":{},"dll_overrides":{},"environment_vars":{}}`),
+		0644)
+	os.WriteFile(filepath.Join(gameDir, "real.exe"), []byte("binary"), 0644)
+	if err := os.Symlink("real.exe", filepath.Join(gameDir, "link.exe")); err != nil {
+		t.Fatal(err)
+	}
+
+	// And a fake proton directory is present (required when bundleDeps=true)
+	protonDir := filepath.Join(d, "proton", "fake-proton")
+	os.MkdirAll(protonDir, 0755)
+	os.WriteFile(filepath.Join(protonDir, "proton"), []byte("#!/bin/sh"), 0755)
+
+	a := &App{
+		Type:   "games",
+		Name:   "Doom",
+		AppDir: "games/Doom",
+		AppConfig: config.App{
+			ProtonVersion: "fake-proton",
+			Executable:    "drive_c/game.exe",
+		},
+		PrefixPath:   "games/Doom/prefix",
+		GlobalConfig: config.Global{},
+	}
+
+	// When Package is called with bundleDeps=true (exercises fs.CopyDir)
+	err := a.Package("gz", true, true)
+
+	// Then no error is returned (CopyDir handles the symlink correctly without recursing into it)
+	if err != nil {
+		t.Fatalf("Package returned unexpected error when game dir contains symlinks: %v", err)
+	}
+
+	// And the archive is created
+	if _, err := os.Stat("Doom.tar.gz"); err != nil {
+		t.Error("expected Doom.tar.gz to be created")
+	}
+}
+
+// --- Run (PRD-22) ---
+
+func TestRun_ErrorForInvalidLaunchMethod(t *testing.T) {
+	// Given a game config with an invalid launch_method and an already-initialised prefix
+	d := t.TempDir()
+	chdir(t, d)
+
+	// Pre-initialise the prefix so InitializePrefix returns immediately (no wine needed)
+	prefixDir := filepath.Join(d, "games", "Doom", "prefix")
+	os.MkdirAll(prefixDir, 0755)
+	os.WriteFile(filepath.Join(prefixDir, "system.reg"), []byte(""), 0644)
+
+	a := &App{
+		Type:   "games",
+		Name:   "Doom",
+		AppDir: "games/Doom",
+		AppConfig: config.App{
+			ProtonVersion: "system",
+			LaunchMethod:  "badmethod",
+			Executable:    "drive_c/game.exe",
+		},
+		PrefixPath:   filepath.Join(d, "games", "Doom", "prefix"),
+		GlobalConfig: config.Global{},
+	}
+
+	// When Run is called
+	err := a.Run()
+
+	// Then it returns an error mentioning the unknown launch method
+	if err == nil {
+		t.Fatal("expected an error for an invalid launch_method but got nil")
+	}
+	if !strings.Contains(err.Error(), "badmethod") {
+		t.Errorf("expected error to mention 'badmethod', got: %v", err)
+	}
+}

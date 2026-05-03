@@ -18,8 +18,6 @@ type VersionInfo struct {
 	CheckForUpdates         bool     `json:"check_for_updates,omitempty"`
 	LDLibraryPathComponents []string `json:"ld_library_path_components,omitempty"`
 	WineDllPathComponents   []string `json:"wine_dll_path_components,omitempty"`
-	PythonHome              string   `json:"python_home,omitempty"`
-	PythonPath              string   `json:"python_path,omitempty"`
 }
 
 type Global struct {
