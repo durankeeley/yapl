@@ -1,6 +1,6 @@
 # PRD-27 - Wire CopyDir into Production Code (Bundle and Prefix Migration)
 
-**Status:** `[ ] Pending`
+**Status:** `[~] In Progress`
 **Priority:** Low
 **Size:** S
 **Sprint:** 1 — Codebase Health

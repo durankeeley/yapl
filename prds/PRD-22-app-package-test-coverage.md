@@ -1,6 +1,6 @@
 # PRD-22 - Add Test Coverage for internal/app Package
 
-**Status:** `[ ] Pending`
+**Status:** `[~] In Progress`
 **Priority:** Medium
 **Size:** M
 **Sprint:** 1 — Codebase Health

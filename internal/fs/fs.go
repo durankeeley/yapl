@@ -2,7 +2,6 @@ package fs
 
 import (
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 )
@@ -14,16 +13,6 @@ func MustCreateDirectory(p string) error {
 // GetAbsolutePath returns the absolute path for p, or an error.
 func GetAbsolutePath(p string) (string, error) {
 	return filepath.Abs(p)
-}
-
-// MustGetAbsolutePath returns the absolute path and fatals on error.
-// Deprecated: prefer GetAbsolutePath and handle the error explicitly.
-func MustGetAbsolutePath(p string) string {
-	abs, err := filepath.Abs(p)
-	if err != nil {
-		log.Fatalf("❌ Could not get absolute path for '%s': %v", p, err)
-	}
-	return abs
 }
 
 func DirExistsAndIsNotEmpty(path string) bool {

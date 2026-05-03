@@ -1,6 +1,6 @@
 # PRD-15 - Remove Unused PythonHome/PythonPath Fields from VersionInfo
 
-**Status:** `[ ] Pending`
+**Status:** `[~] In Progress`
 **Priority:** Low
 **Size:** S
 **Sprint:** 1 — Codebase Health

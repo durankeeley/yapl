@@ -1,6 +1,6 @@
 # PRD-16 - Remove MustGetAbsolutePath and Eliminate log.Fatalf from internal/
 
-**Status:** `[ ] Pending`
+**Status:** `[~] In Progress`
 **Priority:** Medium
 **Size:** S
 **Sprint:** 1 — Codebase Health
