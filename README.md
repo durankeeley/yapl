@@ -91,6 +91,10 @@ YAPL automatically finds the game in `games/` or `apps/` — you never need to s
 | `unpackage game\|app <files>`  | Extracts one or more archives into `games/` or `apps/`.                          |
 | `list`                         | Lists all configured games and apps in the current working directory.            |
 | `info <name>`                  | Displays the resolved configuration and readiness status.                        |
+| `clean <name>`                 | Removes the prefix, Proton, or dependency directories for a game or app.         |
+| `serve`                        | Starts a LAN package server that hosts packaged archives for clients to pull.    |
+| `pull --server <addr> list`    | Lists packages available on a YAPL server.                                       |
+| `pull --server <addr> <name>`  | Downloads and unpackages a game from a YAPL server.                              |
 
 For `run`, `package`, and `info`, YAPL automatically finds the entry in `games/` or `apps/` — you never need to specify the type. Only `setup` and `unpackage` require it because they need to know where to create or extract.
 
@@ -127,6 +131,73 @@ Prefix:        games/Doom/prefix  ✓ initialised
 Launch method: direct
 Executable:    drive_c/Games/Doom/doom.exe
 ```
+
+### `clean` — remove YAPL-managed directories
+
+Free up disk space or reset a broken prefix without touching any other game's files.
+
+```bash
+# Delete only this game's Wine prefix (game.json is kept)
+./yapl clean "Doom" --prefix
+
+# Delete the downloaded Proton build (warns if other games share it)
+./yapl clean "Doom" --proton
+
+# Delete DXVK and VKD3D for the versions this game uses
+./yapl clean "Doom" --deps
+
+# Delete everything at once
+./yapl clean "Doom" --all
+
+# Skip the confirmation prompt in scripts
+./yapl clean "Doom" --all --yes
+```
+
+### `serve` — host a LAN package server
+
+Organise your packaged archives into `games/` and `apps/` subdirectories inside a packages directory, then run this on the host machine. Clients can discover the server automatically on the LAN and pull any game with a single command.
+
+```
+/srv/games/
+  games/
+    Doom.tar.xz
+    NeedForSpeedMostWanted.tar.xz
+  apps/
+    SteamCMD.tar.xz
+```
+
+```bash
+# Open (no auth) — recommended for a trusted LAN
+./yapl serve --packages-dir /srv/games
+
+# Password-protected
+./yapl serve --packages-dir /srv/games --auth password --password "lanparty"
+
+# Custom port (default is 8471)
+./yapl serve --packages-dir /srv/games --port 9000
+```
+
+The server scans the subdirectories on startup and refreshes every 30 seconds, so you can add new packages without restarting. It also broadcasts its address via UDP every 2 seconds so clients can auto-discover it.
+
+### `pull` — download a game from a YAPL server
+
+On a client machine, just name the game. The server tells the client whether it's a game or app, so you never need to specify that yourself.
+
+```bash
+# Auto-discover the server and list available packages
+./yapl pull list
+
+# Auto-discover and download + unpackage a game
+./yapl pull "Doom"
+
+# Specify a server manually (useful when auto-discovery doesn't work across subnets)
+./yapl pull --server 192.168.1.10:8471 "Doom"
+
+# With password auth
+./yapl pull --auth password --password "lanparty" "Doom"
+```
+
+Auto-discovery listens for the server's UDP broadcast on port 8471 for up to 3 seconds. If discovery times out, pass `--server` to specify the address directly.
 
 ### `package --bundle-deps` — offline / LAN portability
 
@@ -176,16 +247,26 @@ Add a `"winetricks"` array to `game.json` to install Windows redistributables in
 
 ## Flags
 
-| Flag               | Description                                                                                                    |
-| :----------------- | :------------------------------------------------------------------------------------------------------------- |
-| `--config <file>`  | Use a custom config file name (e.g. `mod-a.json`) instead of `game.json` / `app.json`.                       |
-| `--method <type>`  | Set the launch method (`direct`, `container`, `umu`) when `setup` creates a new config. Ignored if the config file already exists. |
-| `--upgrade-proton` | Forces a re-download of the configured Proton version, even if it already exists.                             |
-| `--format <type>`  | Compression format for `package`. Options: `gz`, `xz`, `zst`. (Default: `xz`).                              |
-| `--bundle-deps`    | Bundles Proton and dependencies into the package for offline deployment. Use with `package`.                 |
-| `--yes`            | Skips confirmation prompts (e.g. the size warning for `--bundle-deps`).                                      |
-| `--debug`          | Enables verbose logging from Proton and DXVK (`PROTON_LOG=1`, etc.).                                        |
-| `--steam`          | A compatibility flag. It is **not** compatible with the `direct` launch method and is intended for container-based launches. |
+| Flag                    | Description                                                                                                    |
+| :---------------------- | :------------------------------------------------------------------------------------------------------------- |
+| `--config <file>`       | Use a custom config file name (e.g. `mod-a.json`) instead of `game.json` / `app.json`.                       |
+| `--method <type>`       | Set the launch method (`direct`, `container`, `umu`) when `setup` creates a new config. Ignored if the config file already exists. |
+| `--upgrade-proton`      | Forces a re-download of the configured Proton version, even if it already exists.                             |
+| `--format <type>`       | Compression format for `package`. Options: `gz`, `xz`, `zst`. (Default: `xz`).                              |
+| `--bundle-deps`         | Bundles Proton and dependencies into the package for offline deployment. Use with `package`.                 |
+| `--yes`                 | Skips confirmation prompts (e.g. the size warning for `--bundle-deps` or the `clean` confirmation).          |
+| `--debug`               | Enables verbose logging from Proton and DXVK (`PROTON_LOG=1`, etc.).                                        |
+| `--steam`               | A compatibility flag. It is **not** compatible with the `direct` launch method and is intended for container-based launches. |
+| `--prefix`              | (`clean` only) Delete the game/app prefix directory.                                                         |
+| `--proton`              | (`clean` only) Delete the downloaded Proton build for this game.                                             |
+| `--deps`                | (`clean` only) Delete the DXVK and VKD3D directories for this game's configured versions.                   |
+| `--all`                 | (`clean` only) Equivalent to `--prefix --proton --deps`.                                                     |
+| `--packages-dir <path>` | (`serve` only) Directory whose `games/` and `apps/` subdirectories contain packaged archives. Required.     |
+| `--port <int>`          | (`serve` only) Port to listen on. Default: `8471`.                                                           |
+| `--auth <mode>`         | (`serve`/`pull`) Auth mode: `open` or `password`. Default: `open`.                                          |
+| `--password <string>`   | (`serve`/`pull`) Shared password for `password` auth mode.                                                   |
+| `--server <addr>`       | (`pull` only) YAPL server address (`host:port` or full URL). Omit to auto-discover via UDP broadcast.       |
+| `--output-dir <path>`   | (`pull` only) Where to save the downloaded archive before unpackaging (default: system temp dir).            |
 
 -----
 

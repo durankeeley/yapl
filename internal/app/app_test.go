@@ -322,3 +322,176 @@ func TestInfo_PrintsPrefixInitialisedStatus(t *testing.T) {
 		t.Errorf("expected 'initialised' in info output for ready prefix:\n%s", out)
 	}
 }
+
+// --- Clean ---
+
+func makeCleanApp(t *testing.T, dir, name, protonVersion, dxvkVersion, vkd3dVersion string) *App {
+	t.Helper()
+	appDir := filepath.Join("games", name)
+	writeGameConfig(t, dir, name, config.App{
+		ProtonVersion: protonVersion,
+		LaunchMethod:  "direct",
+		Executable:    "drive_c/game.exe",
+		Dependencies: config.AppDependencies{
+			DXVKVersion:  dxvkVersion,
+			VKD3DVersion: vkd3dVersion,
+		},
+	})
+	return &App{
+		Type:      "games",
+		Name:      name,
+		AppDir:    appDir,
+		AppConfig: config.App{ProtonVersion: protonVersion, Dependencies: config.AppDependencies{DXVKVersion: dxvkVersion, VKD3DVersion: vkd3dVersion}},
+		PrefixPath: filepath.Join(appDir, "prefix"),
+		GlobalConfig: config.Global{},
+	}
+}
+
+func TestClean_PrefixDeletesOnlyPrefixDir(t *testing.T) {
+	// Given a game with a prefix directory and a game.json config
+	d := t.TempDir()
+	chdir(t, d)
+	a := makeCleanApp(t, d, "Doom", "ge9", "", "")
+
+	prefixDir := filepath.Join(d, "games", "Doom", "prefix")
+	os.MkdirAll(prefixDir, 0755)
+	os.WriteFile(filepath.Join(prefixDir, "system.reg"), []byte(""), 0644)
+
+	// When Clean is called with only the prefix target
+	var buf strings.Builder
+	err := a.Clean(CleanTargets{Prefix: true}, true, &buf)
+
+	// Then prefix is deleted but game.json remains
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, statErr := os.Stat(prefixDir); !os.IsNotExist(statErr) {
+		t.Error("expected prefix dir to be deleted")
+	}
+	if _, statErr := os.Stat(filepath.Join(d, "games", "Doom", "game.json")); statErr != nil {
+		t.Error("expected game.json to remain after prefix clean")
+	}
+}
+
+func TestClean_ProtonDeletesProtonDir(t *testing.T) {
+	// Given a game referencing ge9 and a proton/ge9 directory on disk
+	d := t.TempDir()
+	chdir(t, d)
+	a := makeCleanApp(t, d, "Doom", "ge9", "", "")
+
+	protonDir := filepath.Join(d, "proton", "ge9")
+	os.MkdirAll(protonDir, 0755)
+	os.WriteFile(filepath.Join(protonDir, "proton"), []byte("#!/bin/sh"), 0755)
+
+	// When Clean is called with only the proton target
+	var buf strings.Builder
+	err := a.Clean(CleanTargets{Proton: true}, true, &buf)
+
+	// Then the proton directory is deleted
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, statErr := os.Stat(protonDir); !os.IsNotExist(statErr) {
+		t.Error("expected proton dir to be deleted")
+	}
+}
+
+func TestClean_ProtonWarnsWhenSharedByMultipleGames(t *testing.T) {
+	// Given two games sharing the same proton version
+	d := t.TempDir()
+	chdir(t, d)
+	a := makeCleanApp(t, d, "Doom", "ge9", "", "")
+	writeGameConfig(t, d, "Quake", config.App{ProtonVersion: "ge9", Executable: "drive_c/quake.exe"})
+
+	protonDir := filepath.Join(d, "proton", "ge9")
+	os.MkdirAll(protonDir, 0755)
+	os.WriteFile(filepath.Join(protonDir, "proton"), []byte("#!/bin/sh"), 0755)
+
+	// When Clean is called with --proton
+	var buf strings.Builder
+	err := a.Clean(CleanTargets{Proton: true}, true, &buf)
+
+	// Then no error is returned and output warns about the other game sharing the version
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Quake") {
+		t.Errorf("expected warning mentioning Quake sharing ge9, got:\n%s", out)
+	}
+}
+
+func TestClean_DepsSkipsIfVersionNotConfigured(t *testing.T) {
+	// Given a game with no DXVK or VKD3D configured
+	d := t.TempDir()
+	chdir(t, d)
+	a := makeCleanApp(t, d, "Doom", "ge9", "", "")
+
+	// When Clean is called with the deps target
+	var buf strings.Builder
+	err := a.Clean(CleanTargets{Deps: true}, true, &buf)
+
+	// Then no error is returned (nothing to delete)
+	if err != nil {
+		t.Fatalf("expected no error when no deps configured, got: %v", err)
+	}
+}
+
+func TestClean_DepsDeletesConfiguredVersions(t *testing.T) {
+	// Given a game with DXVK 2.3 and VKD3D 2.12 configured and their directories present
+	d := t.TempDir()
+	chdir(t, d)
+	a := makeCleanApp(t, d, "Doom", "ge9", "2.3", "2.12")
+
+	dxvkDir := filepath.Join(d, "dependencies", "dxvk", "2.3")
+	vkd3dDir := filepath.Join(d, "dependencies", "vkd3d", "2.12")
+	os.MkdirAll(dxvkDir, 0755)
+	os.WriteFile(filepath.Join(dxvkDir, "x64", "d3d11.dll"), []byte("dll"), 0644)
+	os.MkdirAll(vkd3dDir, 0755)
+	os.WriteFile(filepath.Join(vkd3dDir, "x64", "d3d12.dll"), []byte("dll"), 0644)
+
+	// When Clean is called with the deps target
+	var buf strings.Builder
+	err := a.Clean(CleanTargets{Deps: true}, true, &buf)
+
+	// Then both dependency directories are deleted
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, statErr := os.Stat(dxvkDir); !os.IsNotExist(statErr) {
+		t.Error("expected dxvk dir to be deleted")
+	}
+	if _, statErr := os.Stat(vkd3dDir); !os.IsNotExist(statErr) {
+		t.Error("expected vkd3d dir to be deleted")
+	}
+}
+
+func TestClean_AllDeletesPrefixProtonAndDeps(t *testing.T) {
+	// Given a fully configured game with prefix, proton, and deps on disk
+	d := t.TempDir()
+	chdir(t, d)
+	a := makeCleanApp(t, d, "Doom", "ge9", "2.3", "2.12")
+
+	prefixDir := filepath.Join(d, "games", "Doom", "prefix")
+	protonDir := filepath.Join(d, "proton", "ge9")
+	dxvkDir := filepath.Join(d, "dependencies", "dxvk", "2.3")
+	vkd3dDir := filepath.Join(d, "dependencies", "vkd3d", "2.12")
+	for _, dir := range []string{prefixDir, protonDir, dxvkDir, vkd3dDir} {
+		os.MkdirAll(dir, 0755)
+		os.WriteFile(filepath.Join(dir, "marker"), []byte("x"), 0644)
+	}
+
+	// When Clean is called with all targets
+	var buf strings.Builder
+	err := a.Clean(CleanTargets{Prefix: true, Proton: true, Deps: true}, true, &buf)
+
+	// Then all four directories are deleted
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, dir := range []string{prefixDir, protonDir, dxvkDir, vkd3dDir} {
+		if _, statErr := os.Stat(dir); !os.IsNotExist(statErr) {
+			t.Errorf("expected %s to be deleted", dir)
+		}
+	}
+}

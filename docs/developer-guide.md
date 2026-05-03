@@ -1,6 +1,28 @@
 # YAPL Developer Guide
 
-A plain-language guide to understanding how YAPL works and how to develop it.
+A plain-language guide to understanding, building, and contributing to YAPL.
+
+---
+
+## Project Setup
+
+### Clone and build
+
+```bash
+git clone <repository_url>
+cd yapl
+go mod tidy
+go build -o yapl ./cmd/yapl/
+```
+
+The output binary has no external runtime dependencies. Copy it anywhere.
+
+### Run the tests
+
+```bash
+go test ./...                        # all packages
+go test -v ./internal/archive/      # verbose for one package
+```
 
 ---
 
@@ -12,7 +34,7 @@ Now you want to run the same game on 10 other PCs at a LAN party. Without YAPL, 
 
 1. Define everything (which Proton, which DXVK, which settings) in a JSON file
 2. Package the game + its Wine prefix into a single `.tar` file
-3. Copy that file and the `yapl` binary to another machine
+3. Copy that file and the `yapl` binary to another machine — or run `yapl pull` to fetch it from a YAPL server
 4. Run `yapl unpackage` and then `yapl run` — done
 
 YAPL's job is to make that workflow reliable and repeatable.
@@ -88,7 +110,7 @@ Everything under `proton/` and `dependencies/` is **shared** across all games. Y
 
 ---
 
-## The four commands
+## The commands
 
 | Command | What it does |
 |---------|-------------|
@@ -96,6 +118,11 @@ Everything under `proton/` and `dependencies/` is **shared** across all games. Y
 | `run` | Launches the game |
 | `package` | Zips up a game folder into a `.tar.gz` / `.tar.xz` / `.tar.zst` file |
 | `unpackage` | Extracts one of those archives back into `games/` or `apps/` |
+| `list` | Lists all configured games and apps in the current directory |
+| `info` | Shows readiness status for a specific game or app |
+| `clean` | Removes the prefix, Proton, or dependency directories for a game |
+| `serve` | Starts a LAN package server that hosts packaged archives |
+| `pull` | Downloads and unpackages a game from a YAPL server |
 
 ---
 
@@ -134,7 +161,7 @@ All the interesting code lives under `internal/`. Here's what each package does:
 The front door. It reads the command-line flags (`--game`, `--debug`, etc.) and figures out which command to run. That's all it does. All real work is delegated elsewhere.
 
 ### `internal/app/app.go`
-The coordinator. It holds the loaded config and calls into the other packages in the right order. When you run `setup`, it calls `dependency.EnsureAll`, then `dependency.EnsureRuntime`, then `command.InitializePrefix`. When you run `run`, it does the same setup and then calls one of the launch methods.
+The coordinator. It holds the loaded config and calls into the other packages in the right order. When you run `setup`, it calls `dependency.EnsureAll`, then `dependency.EnsureRuntime`, then `command.InitializePrefix`. When you run `run`, it does the same setup and then calls one of the launch methods. The `Clean` method handles removing YAPL-managed directories.
 
 ### `internal/config/config.go`
 Knows how to read and write `runner.json` and `game.json`. If a config file doesn't exist, it creates a sensible default so the user has a starting point.
@@ -156,13 +183,19 @@ Handles all archive operations: download a `.tar.xz` from the internet and extra
 ### `internal/fs/fs.go`
 Simple filesystem helpers that are needed in more than one place: copy a file, copy a directory, check if a directory exists and isn't empty, resolve an absolute path.
 
+### `internal/server/server.go`
+The LAN package server. Scans `<packages-dir>/games/` and `<packages-dir>/apps/` for `*.tar.*` archives and caches a manifest in memory. Each `PackageEntry` carries a `Type` field (`"game"` or `"app"`) so clients know where to unpackage without being told explicitly. Serves `GET /packages` (JSON list) and `GET /packages/{name}` (file download via `http.ServeContent`). Supports `open` and `password` (HTTP Basic Auth) auth modes. The manifest refreshes every 30 seconds and the server broadcasts its presence via UDP every 2 seconds so clients can auto-discover it.
+
+### `internal/client/client.go`
+The LAN package client. Connects to a YAPL server to list available packages or download one. `Download` returns the archive path and the entry type (`"game"` or `"app"`) so the caller can extract to the right directory. `Discover`/`DiscoverFrom` listen for the server's UDP broadcast and return the server address. Handles auth headers, reports download progress, and cleans up partial files on failure.
+
 ---
 
 ## How a typical `run` flows through the code
 
-Here's what happens when you type `./yapl --game "Doom" run`:
+Here's what happens when you type `./yapl run "Doom"`:
 
-1. **`main.go`** — Parses `--game "Doom"` and `run`. Loads `runner.json` and `games/Doom/game.json`. Creates an `App` struct. Calls `app.Run()`.
+1. **`main.go`** — Parses `run` and `"Doom"`. Calls `app.Find("Doom")` to locate it in `games/` or `apps/`. Loads configs. Creates an `App` struct. Calls `app.Run()`.
 
 2. **`app.Run()`** — Calls `dependency.EnsureAll()` to make sure Proton and DXVK are downloaded. Then calls `dependency.EnsureRuntime()` if a runtime is configured. Then calls `command.InitializePrefix()` to make sure the Wine prefix exists.
 
@@ -176,14 +209,26 @@ Here's what happens when you type `./yapl --game "Doom" run`:
 
 ---
 
+## How a typical `pull` flows through the code
+
+Here's what happens when you type `./yapl pull --server 192.168.1.10:8471 "Doom" game`:
+
+1. **`main.go`** — Parses the `pull` command and creates a `client.Client` with the server address and auth config.
+
+2. **`client.List()`** — Fetches `GET /packages` to discover the filename extension for the `Doom` package.
+
+3. **`client.Download()`** — Fetches `GET /packages/Doom`, writes the response to a temp file while reporting progress to stderr. Cleans up the temp file if the download fails.
+
+4. **`archive.Unpackage()`** — Extracts the downloaded archive into `games/`.
+
+---
+
 ## How to add a new command
 
 1. Add a `case "mycommand":` to the switch in `cmd/yapl/main.go`
 2. Add a `MyCommand()` method on the `App` struct in `internal/app/app.go`
 3. Add the detailed logic to the relevant package under `internal/`
 4. Write tests first (failing), then the implementation
-
----
 
 ## How to add a new launch method
 
@@ -194,25 +239,6 @@ Here's what happens when you type `./yapl --game "Doom" run`:
 
 ---
 
-## Running the tests
-
-```bash
-go test ./...          # run all tests
-go test -v ./internal/archive/  # verbose output for one package
-```
-
----
-
-## Building
-
-```bash
-go build -o yapl ./cmd/yapl/
-```
-
-The output binary has no external runtime dependencies. Copy it anywhere.
-
----
-
 ## Importing an existing prefix from Lutris
 
 If you have already set up a game in Lutris and want to bring it into YAPL:
@@ -220,7 +246,7 @@ If you have already set up a game in Lutris and want to bring it into YAPL:
 1. Find the Lutris prefix. It is usually somewhere under `~/.local/share/lutris/runners/wine/` or `~/Games/`.
 2. Copy (or move) it to `games/YourGameName/prefix/`.
 3. Create a `games/YourGameName/game.json` pointing at the executable (path relative to `prefix/`).
-4. Run `./yapl --game YourGameName run`.
+4. Run `./yapl run "YourGameName"`.
 
 YAPL auto-detects both prefix layouts:
 - **Flat layout** (YAPL standard): `system.reg` at `prefix/system.reg`
@@ -240,8 +266,14 @@ The old `wine_arch: win32` config option has been removed.
 
 ## Common gotchas
 
-**Proton and DXVK are shared.** If you delete the `proton/` folder it affects every game. Download only the versions you need.
+**Proton and DXVK are shared.** If you delete the `proton/` folder it affects every game. Use `yapl clean --proton` — it warns you if another game shares the same Proton version.
 
 **The `container` method needs a full Proton build, not a Wine-only build.** It needs the `proton` script that GE-Proton and similar builds include. If you use a plain Wine build (e.g., `tkg-wine`), use `direct` instead.
 
 **`runner.json` is the single source of truth for versions.** If a version key in `game.json` doesn't exist in `runner.json`, YAPL will error. Always define the version in `runner.json` first.
+
+**Archive name collisions on the server.** If a packages directory contains both `Doom.tar.xz` and `Doom.tar.gz`, only one will be served. The server logs a warning. Use a single format per game to avoid this.
+
+**Auto-discovery only works on the same subnet.** UDP broadcasts don't cross routers. If the client and server are on different subnets, pass `--server <addr>` manually.
+
+**Multiple YAPL servers on the same LAN.** `pull` without `--server` picks the first broadcast received. If two servers are running simultaneously, the client may connect to either one.
