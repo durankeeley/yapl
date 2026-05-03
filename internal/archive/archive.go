@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -80,28 +79,28 @@ func Unpackage(targetDir string, archivePaths []string) error {
 		fmt.Printf("-> Unpackaging '%s'...\n", archivePath)
 		nameWithoutExt, ok := trimArchiveSuffix(filepath.Base(archivePath))
 		if !ok {
-			log.Printf("⚠️  Skipping '%s': unrecognized archive extension.", archivePath)
+			fmt.Fprintf(os.Stderr, "⚠️  Skipping '%s': unrecognized archive extension.\n", archivePath)
 			continue
 		}
 
 		// Guard: skip if the destination folder already exists.
 		destPath := filepath.Join(targetDir, nameWithoutExt)
 		if _, err := os.Stat(destPath); err == nil {
-			log.Printf("⚠️  Skipping '%s': destination '%s' already exists.", archivePath, destPath)
+			fmt.Fprintf(os.Stderr, "⚠️  Skipping '%s': destination '%s' already exists.\n", archivePath, destPath)
 			continue
 		}
 
 		// Extract to the parent targetDir; the archive already contains the named subdirectory.
+		// Cleanup of partial extraction on failure is the caller's responsibility.
 		ar := &Archive{Source: archivePath}
 		if err := ar.Extract(targetDir, false); err != nil {
-			log.Printf("❌ Failed to unpackage '%s': %v", archivePath, err)
-			continue
+			return fmt.Errorf("failed to unpackage '%s': %w", archivePath, err)
 		}
 		fmt.Printf("✅ Successfully unpackaged to '%s'\n", destPath)
 
 		// Install bundled dependencies if the archive contained a _bundle/ dir.
 		if err := installBundledDeps(targetDir); err != nil {
-			log.Printf("⚠️  Bundle install failed: %v", err)
+			return fmt.Errorf("bundle install failed: %w", err)
 		}
 	}
 	fmt.Println("\n✨ Unpackaging complete!")

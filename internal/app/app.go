@@ -50,7 +50,11 @@ func (a *App) Setup() error {
 		return err
 	}
 	if err := dependency.EnsureRuntime(a.AppConfig, a.GlobalConfig); err != nil {
-		return err
+		if strings.Contains(err.Error(), "runtime version check failed") {
+			fmt.Fprintf(os.Stderr, "⚠️  Warning: %v — proceeding with cached runtime\n", err)
+		} else {
+			return err
+		}
 	}
 	if err := command.InitializePrefix(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.DebugMode); err != nil {
 		return err
@@ -410,7 +414,11 @@ func (a *App) Run() error {
 		return err
 	}
 	if err := dependency.EnsureRuntime(a.AppConfig, a.GlobalConfig); err != nil {
-		return err
+		if strings.Contains(err.Error(), "runtime version check failed") {
+			fmt.Fprintf(os.Stderr, "⚠️  Warning: %v — proceeding with cached runtime\n", err)
+		} else {
+			return err
+		}
 	}
 	if err := command.InitializePrefix(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.DebugMode); err != nil {
 		return err

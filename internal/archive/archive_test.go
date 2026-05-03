@@ -422,6 +422,28 @@ func TestUnpackage_LeavesNoBundleDirAfterExtraction(t *testing.T) {
 	}
 }
 
+// --- PRD-18: Unpackage error propagation ---
+
+func TestUnpackage_ReturnsErrorWhenExtractionFails(t *testing.T) {
+	// Given a corrupt (non-tar) file with a recognised archive extension
+	d := t.TempDir()
+	corruptFile := filepath.Join(d, "corrupt.tar.gz")
+	if err := os.WriteFile(corruptFile, []byte("this is not a valid archive"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	targetDir := filepath.Join(d, "output")
+	os.MkdirAll(targetDir, 0755)
+
+	// When Unpackage is called
+	err := Unpackage(targetDir, []string{corruptFile})
+
+	// Then it returns an error — extraction failures must not be silently swallowed
+	if err == nil {
+		t.Fatal("expected error when extraction fails, but got nil")
+	}
+}
+
 // --- trimArchiveSuffix ---
 
 func TestTrimArchiveSuffix(t *testing.T) {

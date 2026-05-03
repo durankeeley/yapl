@@ -37,7 +37,7 @@
 * **Specifics:** `nil` or empty slice means no exclusions — existing behaviour is preserved.
 
 ### Operator note
-* **Behavior/Rule:** When `--no-prefix` is active, print to stdout after successful package: `Note: Wine prefix excluded. Run 'yapl --game <name> setup' on the target machine before running.`
+* **Behavior/Rule:** When `--no-prefix` is active, print to stdout after successful package: `Note: Wine prefix excluded. Run 'yapl setup game <name>' on the target machine before running.`
 * **Specifics:** Do not print this note when packaging with the prefix included.
 
 ## 4. Execution & Milestones

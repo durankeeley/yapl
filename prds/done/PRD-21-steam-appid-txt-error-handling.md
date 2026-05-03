@@ -1,6 +1,6 @@
 # PRD-21 - Fix steam_appid.txt Write Error Handling
 
-**Status:** `[ ] Pending`
+**Status:** `[x] Complete`
 **Priority:** Medium
 **Size:** S
 **Sprint:** 2 — Reliability

@@ -1,6 +1,6 @@
 # PRD-17 - Validate HTTP Status Codes in dependency/runtime.go
 
-**Status:** `[ ] Pending`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** S
 **Sprint:** 2 — Reliability

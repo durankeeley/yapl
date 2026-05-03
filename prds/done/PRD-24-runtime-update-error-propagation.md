@@ -1,6 +1,6 @@
 # PRD-24 - Propagate Runtime Update Check Errors Instead of Swallowing Them
 
-**Status:** `[ ] Pending`
+**Status:** `[x] Complete`
 **Priority:** Medium
 **Size:** S
 **Sprint:** 2 — Reliability
