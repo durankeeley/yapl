@@ -53,12 +53,13 @@ Add a `background_services` array to the `App` config (list of Windows executabl
   ```
   * Starts each service with `cmd.Start()` (non-blocking).
   * Routes `cmd.Stdout` and `cmd.Stderr` to `os.Stdout` / `os.Stderr` so crashes are visible.
-  * After all services are started, sleeps `delayMs` milliseconds (default 1000 if caller passes 0).
+  * After all services have been started (and at least one succeeded), sleeps `delayMs` milliseconds. If `delayMs` is 0, no sleep occurs. If no services started, no sleep occurs.
   * Returns a cleanup `func()` that calls `p.Kill()` on every live process.
-* **Wire into `RunDirectly`:** call before `executeCommand`, `defer cleanup()`.
-* **Wire into `RunInContainer`:** call before `executeCommand`, `defer cleanup()`. The args prefix already contains the container invocation (`entryPointPath`, `--verb=…`, shimPath, protonScriptPath, protonVerb); re-use it for services too.
-* **Wire into `RunWithUMU`:** call before `executeCommand`, `defer cleanup()`.
-* A service that fails to start is logged as a warning and skipped — it does not abort the whole launch (the user may still want the game to run).
+  * A service that fails to start is printed as a warning with `fmt.Fprintf(os.Stderr, ...)` and skipped — `log.Printf` is prohibited in internal packages (PRD-16). The remaining services and the main launch still proceed.
+* **Delay defaulting at call site (not inside the function):** each `Run*` function computes `delay := appCfg.BackgroundServiceDelayMs; if delay == 0 { delay = 1000 }` before calling `launchBackgroundServices`. The function itself treats `delayMs` literally (0 = no sleep). This keeps the function deterministic and testable without sleeping.
+* **Wire into `RunDirectly`:** resolve delay, call `launchBackgroundServices` with `wineExecutablePath` and no argsPrefix, `defer cleanup()`.
+* **Wire into `RunInContainer`:** resolve delay, call with `entryPointPath` and argsPrefix `["--verb=waitforexitandrun", "--", shimPath, protonScriptPath, "waitforexitandrun"]`, `defer cleanup()`.
+* **Wire into `RunWithUMU`:** resolve delay, call with `umuRunPath` and no argsPrefix, `defer cleanup()`.
 
 ### No changes to
 
@@ -70,11 +71,13 @@ Add a `background_services` array to the `App` config (list of Windows executabl
 ## 4. Execution & Milestones
 
 - [ ] Add `BackgroundServices []string` and `BackgroundServiceDelayMs int` to `config.App`.
-- [ ] Write failing tests in `internal/command/command_test.go` covering:
-  - Services started before the main executable.
-  - Cleanup func kills started processes.
-  - A service that fails to start is skipped without aborting the run.
-  - Zero-length `BackgroundServices` is a no-op (no delay, cleanup is a no-op).
+- [ ] Write failing tests in `internal/command/background_service_linux_test.go` (Linux-specific: uses `syscall.Signal(0)` to verify process liveness):
+  - Empty service list is a no-op: no delay, cleanup is safe to call.
+  - A started service is alive (verified via PID) after `launchBackgroundServices` returns.
+  - `cleanup()` kills the service process (verified via signal(0) returning error after kill).
+  - Multiple services: all are killed by a single `cleanup()` call.
+  - Non-existent runner binary: `cmd.Start()` fails, service is skipped, no panic, cleanup is safe.
+  - argsPrefix is prepended before the service path: verified by passing a `sh -c` prefix that creates a marker file — proves args arrive in the right order without needing Wine.
 - [ ] Implement `launchBackgroundServices` in `command.go`.
 - [ ] Wire `launchBackgroundServices` + `defer cleanup()` into `RunDirectly`, `RunInContainer`, and `RunWithUMU`.
 - [ ] Run `go test ./...` — all tests pass.
@@ -89,7 +92,7 @@ Add a `background_services` array to the `App` config (list of Windows executabl
 
 * `internal/config/config.go` — add two fields to `App` struct.
 * `internal/command/command.go` — add `launchBackgroundServices`; wire into the three `Run*` functions.
-* `internal/command/command_test.go` — new test cases.
+* `internal/command/background_service_linux_test.go` — new test cases (Linux-specific, uses `syscall`).
 * `README.md` — document the new config fields.
 
 ### Risks & Considerations
