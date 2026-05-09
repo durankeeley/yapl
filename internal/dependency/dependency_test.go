@@ -194,6 +194,136 @@ func TestEnsureWinetricks_RunsSingleInvocationWithAllPackages(t *testing.T) {
 	}
 }
 
+// --- filterUninstalledPackages ---
+
+func TestFilterUninstalledPackages_NoLogFile(t *testing.T) {
+	// Given a prefix with no winetricks.log
+	prefixDir := t.TempDir()
+	packages := []string{"dinput8", "vcrun2022"}
+
+	// When filterUninstalledPackages is called
+	got := filterUninstalledPackages(prefixDir, packages)
+
+	// Then all packages are returned (nothing is considered installed)
+	if len(got) != len(packages) {
+		t.Fatalf("expected %d packages, got %d: %v", len(packages), len(got), got)
+	}
+}
+
+func TestFilterUninstalledPackages_AllInstalled(t *testing.T) {
+	// Given a prefix whose winetricks.log lists all requested packages
+	prefixDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(prefixDir, "winetricks.log"), []byte("dinput8\nvcrun2022\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// When filterUninstalledPackages is called
+	got := filterUninstalledPackages(prefixDir, []string{"dinput8", "vcrun2022"})
+
+	// Then the result is empty — nothing left to install
+	if len(got) != 0 {
+		t.Fatalf("expected empty list, got: %v", got)
+	}
+}
+
+func TestFilterUninstalledPackages_PartiallyInstalled(t *testing.T) {
+	// Given a prefix whose log only contains one of the two requested packages
+	prefixDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(prefixDir, "winetricks.log"), []byte("dinput8\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// When filterUninstalledPackages is called with two packages
+	got := filterUninstalledPackages(prefixDir, []string{"dinput8", "vcrun2022"})
+
+	// Then only the not-yet-installed package is returned
+	if len(got) != 1 || got[0] != "vcrun2022" {
+		t.Fatalf("expected [vcrun2022], got: %v", got)
+	}
+}
+
+func TestFilterUninstalledPackages_NoneInstalled(t *testing.T) {
+	// Given a prefix with an empty winetricks.log
+	prefixDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(prefixDir, "winetricks.log"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// When filterUninstalledPackages is called
+	got := filterUninstalledPackages(prefixDir, []string{"vcrun2022"})
+
+	// Then all packages are returned
+	if len(got) != 1 || got[0] != "vcrun2022" {
+		t.Fatalf("expected [vcrun2022], got: %v", got)
+	}
+}
+
+func TestEnsureWinetricks_SkipsWhenAllAlreadyInstalled(t *testing.T) {
+	// Given a fake winetricks that would record a call if invoked
+	d := t.TempDir()
+	argsFile := filepath.Join(d, "winetricks.args")
+	script := "#!/bin/sh\necho \"$@\" > " + argsFile + "\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(d, "winetricks"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", d+":"+origPath)
+	defer os.Setenv("PATH", origPath)
+
+	// And a prefix whose log already records the requested package
+	prefixDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(prefixDir, "winetricks.log"), []byte("dinput8\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// When EnsureWinetricks is called
+	if err := EnsureWinetricks(prefixDir, []string{"dinput8"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Then winetricks was never invoked
+	if _, err := os.Stat(argsFile); !os.IsNotExist(err) {
+		t.Fatal("winetricks was called even though all packages were already installed")
+	}
+}
+
+func TestEnsureWinetricks_OnlyInstallsMissingPackages(t *testing.T) {
+	// Given a fake winetricks that records its arguments
+	d := t.TempDir()
+	argsFile := filepath.Join(d, "winetricks.args")
+	script := "#!/bin/sh\necho \"$@\" > " + argsFile + "\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(d, "winetricks"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	origPath := os.Getenv("PATH")
+	os.Setenv("PATH", d+":"+origPath)
+	defer os.Setenv("PATH", origPath)
+
+	// And a prefix where dinput8 is installed but vcrun2022 is not
+	prefixDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(prefixDir, "winetricks.log"), []byte("dinput8\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// When EnsureWinetricks is called with both packages
+	if err := EnsureWinetricks(prefixDir, []string{"dinput8", "vcrun2022"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Then winetricks was called with only the missing package
+	argsBytes, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal("winetricks was not called at all")
+	}
+	argsStr := strings.TrimSpace(string(argsBytes))
+	if strings.Contains(argsStr, "dinput8") {
+		t.Fatalf("dinput8 should have been skipped (already installed), got args: %q", argsStr)
+	}
+	if !strings.Contains(argsStr, "vcrun2022") {
+		t.Fatalf("vcrun2022 should have been passed to winetricks, got args: %q", argsStr)
+	}
+}
+
 // --- getInfo ---
 
 func TestGetInfo_ReturnsVersionInfoForKnownDependency(t *testing.T) {

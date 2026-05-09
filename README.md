@@ -245,6 +245,8 @@ Add a `"winetricks"` array to `game.json` to install Windows redistributables in
 
 `winetricks` must be installed and in your `PATH`.
 
+YAPL reads `prefix/winetricks.log` before each run and skips any packages already recorded there, so repeated `run` or `setup` calls only install what is actually missing.
+
 ## Flags
 
 | Flag                    | Description                                                                                                    |
@@ -359,6 +361,33 @@ This method uses the Steam Linux Runtime for a sandboxed, highly compatible envi
   }
 }
 ```
+
+### DLL Overrides
+
+Use `dll_overrides` to control how Wine resolves specific DLLs. This sets `WINEDLLOVERRIDES` — each key is a DLL name (without `.dll`) and the value is the load order:
+
+| Value | Meaning |
+| :---- | :------ |
+| `"n"` | Native (Windows) DLL only |
+| `"b"` | Builtin (Wine) DLL only |
+| `"n,b"` | Try native first, fall back to builtin |
+| `"b,n"` | Try builtin first, fall back to native |
+| `""` | Disable the DLL entirely |
+
+```json
+{
+  "proton_version": "cachyos-proton-10-slr",
+  "launch_method": "direct",
+  "executable": "drive_c/Games/MyGame/MyGame.exe",
+  "dll_overrides": {
+    "d3d11": "n,b",
+    "dxgi": "n,b",
+    "mscoree": ""
+  }
+}
+```
+
+This is commonly used to force native DXVK/VKD3D DLLs (`d3d11`, `dxgi`, `d3d12`) instead of Wine's builtins, or to disable specific DLLs that cause problems.
 
 ### `game.json` Example 3: `umu-launcher` (GOG/Epic Games/All Others)
 

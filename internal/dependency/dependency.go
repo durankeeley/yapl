@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"yapl/internal/archive"
 	"yapl/internal/config"
@@ -134,9 +135,14 @@ func install(name, version, installPath, prefixPath string, dlls []string) error
 }
 
 // EnsureWinetricks runs winetricks to install the requested packages into the Wine prefix.
-// It is a no-op when packages is empty. The winetricks binary must be in PATH.
+// It is a no-op when packages is empty or all are already recorded in prefix/winetricks.log.
+// The winetricks binary must be in PATH.
 func EnsureWinetricks(prefixPath string, packages []string) error {
 	if len(packages) == 0 {
+		return nil
+	}
+	toInstall := filterUninstalledPackages(prefixPath, packages)
+	if len(toInstall) == 0 {
 		return nil
 	}
 	winetricksPath, err := exec.LookPath("winetricks")
@@ -147,7 +153,7 @@ func EnsureWinetricks(prefixPath string, packages []string) error {
 	if err != nil {
 		return fmt.Errorf("could not resolve prefix path: %w", err)
 	}
-	args := append([]string{"--unattended"}, packages...)
+	args := append([]string{"--unattended"}, toInstall...)
 	cmd := exec.Command(winetricksPath, args...)
 	cmd.Env = append(os.Environ(), "WINEPREFIX="+absPrefix)
 	cmd.Stdout = os.Stdout
@@ -156,6 +162,29 @@ func EnsureWinetricks(prefixPath string, packages []string) error {
 		return fmt.Errorf("winetricks failed: %w", err)
 	}
 	return nil
+}
+
+// filterUninstalledPackages reads prefix/winetricks.log and returns only those packages
+// from the requested list that are not already recorded there.
+func filterUninstalledPackages(prefixPath string, packages []string) []string {
+	logPath := filepath.Join(prefixPath, "winetricks.log")
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		return packages
+	}
+	installed := make(map[string]bool)
+	for _, line := range strings.Split(string(data), "\n") {
+		if pkg := strings.TrimSpace(line); pkg != "" {
+			installed[pkg] = true
+		}
+	}
+	var missing []string
+	for _, pkg := range packages {
+		if !installed[pkg] {
+			missing = append(missing, pkg)
+		}
+	}
+	return missing
 }
 
 func getInfo(name, version string, globalCfg config.Global) (config.VersionInfo, error) {
