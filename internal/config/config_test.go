@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -252,6 +253,125 @@ func TestLoadOrCreateApp_ReadsExistingConfig(t *testing.T) {
 	}
 	if app.Executable != "drive_c/game.exe" {
 		t.Fatalf("expected executable 'drive_c/game.exe', got %q", app.Executable)
+	}
+}
+
+// --- ValidateApp ---
+
+func TestValidateApp_PassesForValidDirectConfig(t *testing.T) {
+	cfg := App{
+		ProtonVersion: "ge-proton-9",
+		Executable:    "drive_c/game.exe",
+		LaunchMethod:  "direct",
+	}
+	if err := ValidateApp(cfg); err != nil {
+		t.Fatalf("expected no error for valid direct config, got: %v", err)
+	}
+}
+
+func TestValidateApp_PassesForValidContainerConfig(t *testing.T) {
+	cfg := App{
+		ProtonVersion:  "ge-proton-9",
+		Executable:     "drive_c/game.exe",
+		LaunchMethod:   "container",
+		RuntimeVersion: "sniper",
+	}
+	if err := ValidateApp(cfg); err != nil {
+		t.Fatalf("expected no error for valid container config, got: %v", err)
+	}
+}
+
+func TestValidateApp_PassesForSystemProton(t *testing.T) {
+	cfg := App{
+		ProtonVersion: "system",
+		Executable:    "drive_c/game.exe",
+		LaunchMethod:  "direct",
+	}
+	if err := ValidateApp(cfg); err != nil {
+		t.Fatalf("'system' is a valid proton_version and should not be rejected: %v", err)
+	}
+}
+
+func TestValidateApp_ReturnsErrorForMissingProtonVersion(t *testing.T) {
+	cfg := App{
+		Executable:   "drive_c/game.exe",
+		LaunchMethod: "direct",
+	}
+	err := ValidateApp(cfg)
+	if err == nil {
+		t.Fatal("expected error for missing proton_version, got nil")
+	}
+	if !strings.Contains(err.Error(), "proton_version") {
+		t.Fatalf("error should mention proton_version, got: %v", err)
+	}
+}
+
+func TestValidateApp_ReturnsErrorForMissingExecutable(t *testing.T) {
+	cfg := App{
+		ProtonVersion: "ge-proton-9",
+		LaunchMethod:  "direct",
+	}
+	err := ValidateApp(cfg)
+	if err == nil {
+		t.Fatal("expected error for missing executable, got nil")
+	}
+	if !strings.Contains(err.Error(), "executable") {
+		t.Fatalf("error should mention executable, got: %v", err)
+	}
+}
+
+func TestValidateApp_ReturnsErrorForInvalidLaunchMethod(t *testing.T) {
+	cfg := App{
+		ProtonVersion: "ge-proton-9",
+		Executable:    "drive_c/game.exe",
+		LaunchMethod:  "magic",
+	}
+	err := ValidateApp(cfg)
+	if err == nil {
+		t.Fatal("expected error for invalid launch_method, got nil")
+	}
+	if !strings.Contains(err.Error(), "launch_method") {
+		t.Fatalf("error should mention launch_method, got: %v", err)
+	}
+}
+
+func TestValidateApp_ReturnsErrorForContainerWithNoRuntime(t *testing.T) {
+	cfg := App{
+		ProtonVersion: "ge-proton-9",
+		Executable:    "drive_c/game.exe",
+		LaunchMethod:  "container",
+	}
+	err := ValidateApp(cfg)
+	if err == nil {
+		t.Fatal("expected error for container launch without runtime_version, got nil")
+	}
+	if !strings.Contains(err.Error(), "runtime_version") {
+		t.Fatalf("error should mention runtime_version, got: %v", err)
+	}
+}
+
+func TestValidateApp_ReturnsAllErrorsTogether(t *testing.T) {
+	cfg := App{} // all fields empty
+	err := ValidateApp(cfg)
+	if err == nil {
+		t.Fatal("expected error for empty config, got nil")
+	}
+	msg := err.Error()
+	for _, field := range []string{"proton_version", "executable", "launch_method"} {
+		if !strings.Contains(msg, field) {
+			t.Errorf("expected error to mention %q, got: %v", field, msg)
+		}
+	}
+}
+
+func TestValidateApp_ErrorPrefixedWithConfigValidationFailed(t *testing.T) {
+	cfg := App{}
+	err := ValidateApp(cfg)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.HasPrefix(err.Error(), "config validation failed:") {
+		t.Fatalf("error should start with 'config validation failed:', got: %v", err)
 	}
 }
 

@@ -1,6 +1,6 @@
 # PRD-8 - Config Validation Before Run/Setup
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** S
 **Sprint:** 3 — Validation & Deployment Flexibility

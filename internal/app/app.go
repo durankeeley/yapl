@@ -45,6 +45,9 @@ func New(appType, appName string, force, debug, steam bool, gc config.Global, ac
 
 // Setup ensures all dependencies are present and initializes the Wine prefix.
 func (a *App) Setup() error {
+	if err := config.ValidateApp(a.AppConfig); err != nil {
+		return err
+	}
 	fmt.Printf("🛠️ Setting up '%s'...\n", a.Name)
 	if err := dependency.EnsureAll(a.AppConfig, a.ForceUpgrade, a.GlobalConfig); err != nil {
 		return err
@@ -203,6 +206,9 @@ func statusMark(present bool) string {
 // When bundleDeps is true, Proton and configured dependencies are staged into a _bundle/
 // directory inside the archive for true offline portability.
 func (a *App) Package(format string, bundleDeps, yes bool) error {
+	if err := config.ValidateApp(a.AppConfig); err != nil {
+		return err
+	}
 	fmt.Println("📦 Starting packaging process...")
 
 	if !bundleDeps {
@@ -409,6 +415,9 @@ func containsProtonVersion(data []byte, version string) bool {
 
 // Run prepares the environment and launches the application.
 func (a *App) Run() error {
+	if err := config.ValidateApp(a.AppConfig); err != nil {
+		return err
+	}
 	fmt.Printf("🚀 Launching '%s'...\n", a.Name)
 	if err := dependency.EnsureAll(a.AppConfig, a.ForceUpgrade, a.GlobalConfig); err != nil {
 		return err

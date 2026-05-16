@@ -565,10 +565,14 @@ func TestPackage_CreatesArchiveFile(t *testing.T) {
 	os.WriteFile(filepath.Join(gameDir, "README.txt"), []byte("hello"), 0644)
 
 	a := &App{
-		Type:      "games",
-		Name:      "Doom",
-		AppDir:    "games/Doom",
-		AppConfig: config.App{ProtonVersion: "ge9", Executable: "drive_c/game.exe"},
+		Type:   "games",
+		Name:   "Doom",
+		AppDir: "games/Doom",
+		AppConfig: config.App{
+			ProtonVersion: "ge9",
+			Executable:    "drive_c/game.exe",
+			LaunchMethod:  "direct",
+		},
 		PrefixPath: "games/Doom/prefix",
 	}
 
@@ -615,6 +619,7 @@ func TestPackage_PreservesSymlinksInGameDirectory(t *testing.T) {
 		AppConfig: config.App{
 			ProtonVersion: "fake-proton",
 			Executable:    "drive_c/game.exe",
+			LaunchMethod:  "direct",
 		},
 		PrefixPath:   "games/Doom/prefix",
 		GlobalConfig: config.Global{},
@@ -662,11 +667,11 @@ func TestRun_ErrorForInvalidLaunchMethod(t *testing.T) {
 	// When Run is called
 	err := a.Run()
 
-	// Then it returns an error mentioning the unknown launch method
+	// Then it returns a validation error mentioning launch_method
 	if err == nil {
 		t.Fatal("expected an error for an invalid launch_method but got nil")
 	}
-	if !strings.Contains(err.Error(), "badmethod") {
-		t.Errorf("expected error to mention 'badmethod', got: %v", err)
+	if !strings.Contains(err.Error(), "launch_method") {
+		t.Errorf("expected error to mention 'launch_method', got: %v", err)
 	}
 }

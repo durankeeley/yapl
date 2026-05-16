@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"yapl/internal/fs"
 )
@@ -58,6 +59,35 @@ type App struct {
 
 	BackgroundServices       []string `json:"background_services,omitempty"`
 	BackgroundServiceDelayMs int      `json:"background_service_delay_ms,omitempty"`
+}
+
+// ValidateApp checks that cfg contains all required fields before any command runs.
+// All violations are collected and returned as a single error.
+func ValidateApp(cfg App) error {
+	var errs []string
+
+	if cfg.ProtonVersion == "" {
+		errs = append(errs, "proton_version is required")
+	}
+	if cfg.Executable == "" {
+		errs = append(errs, "executable is required")
+	}
+
+	switch cfg.LaunchMethod {
+	case "direct", "umu":
+		// valid, no extra requirements
+	case "container":
+		if cfg.RuntimeVersion == "" {
+			errs = append(errs, "runtime_version is required when launch_method is container")
+		}
+	default:
+		errs = append(errs, "launch_method must be one of direct, container, umu")
+	}
+
+	if len(errs) == 0 {
+		return nil
+	}
+	return fmt.Errorf("config validation failed: %s", strings.Join(errs, "; "))
 }
 
 // --- Loading and Saving Logic ---
