@@ -1,6 +1,6 @@
 # PRD-38 - Microkernel Architecture: Versioned Modules, Scoped Flags, Generated Help
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** High
 **Size:** L
 **Sprint:** Phase 1 — Out-of-the-box foundation
