@@ -1,6 +1,6 @@
 # PRD-19 - Validate DXVKDirectXVersion Config Field
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** Medium
 **Size:** S
 **Sprint:** Phase 1 — Out-of-the-box foundation
