@@ -3,7 +3,6 @@ package command
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -145,7 +144,7 @@ func initializePrefixWithProtonScript(absPrefix, prefixPath string, appCfg confi
 	initCmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, false)
 	if err := initCmd.Run(); err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
-			log.Printf("-> Prefix creation output:\n%s", string(exitError.Stderr))
+			fmt.Fprintf(os.Stderr, "-> Prefix creation output:\n%s\n", string(exitError.Stderr))
 		}
 		return fmt.Errorf("prefix initialization with proton script failed: %w", err)
 	}

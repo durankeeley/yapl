@@ -726,3 +726,25 @@ func TestExtract_OverwritesLongerFilesCompletely(t *testing.T) {
 		t.Fatalf("file = %q", got)
 	}
 }
+
+func TestExtractVerified_Zstd(t *testing.T) {
+	t.Run("given a zstd archive when extracted and verified then the checksum covers the whole stream", func(t *testing.T) {
+		// Given a zstd archive, whose decoder reads ahead in a background goroutine
+		src := t.TempDir()
+		os.MkdirAll(filepath.Join(src, "Doom"), 0755)
+		os.WriteFile(filepath.Join(src, "Doom", "doom.wad"), bytes.Repeat([]byte("wad"), 50000), 0644)
+		var buf bytes.Buffer
+		if err := Write(&buf, filepath.Join(src, "Doom"), src, "zst"); err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(buf.Bytes())
+
+		// When
+		err := ExtractVerified(bytes.NewReader(buf.Bytes()), "zst", t.TempDir(), hex.EncodeToString(sum[:]), int64(buf.Len()))
+
+		// Then
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+}

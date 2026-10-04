@@ -3,6 +3,8 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -95,28 +97,56 @@ func (s *Server) BroadcastTo(addr *net.UDPAddr) error {
 	return err
 }
 
-// Start serves until the listener fails, rescanning and broadcasting in the
-// background.
-func (s *Server) Start() error {
-	go func() {
-		ticker := time.NewTicker(defaults.ManifestRefreshInterval)
-		defer ticker.Stop()
-		for range ticker.C {
-			if err := s.store.Refresh(); err != nil {
-				fmt.Fprintf(s.cfg.Warnings, "warning: rescan failed: %v\n", err)
-			}
-		}
-	}()
-	go func() {
-		addr := &net.UDPAddr{IP: net.IPv4bcast, Port: s.cfg.Port}
-		ticker := time.NewTicker(defaults.BroadcastInterval)
-		defer ticker.Stop()
-		for range ticker.C {
-			s.BroadcastTo(addr)
-		}
-	}()
+// shutdownTimeout bounds how long in-flight downloads get when the server
+// stops.
+const shutdownTimeout = 5 * time.Second
 
-	listen := fmt.Sprintf(":%d", s.cfg.Port)
-	fmt.Printf("-> Serving %d packages from %s on %s (auth: %s)\n", len(s.store.Catalog()), s.cfg.PackagesDir, listen, s.cfg.Auth)
-	return http.ListenAndServe(listen, s.handler)
+// Start listens on the configured port and serves until the process exits.
+func (s *Server) Start() error {
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", s.cfg.Port))
+	if err != nil {
+		return err
+	}
+	return s.Serve(context.Background(), ln)
+}
+
+// Serve answers on ln, rescanning and broadcasting in the background, until
+// ctx is cancelled (nil error) or the listener fails.
+func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
+	go s.every(ctx, defaults.ManifestRefreshInterval, func() {
+		if err := s.store.Refresh(); err != nil {
+			fmt.Fprintf(s.cfg.Warnings, "warning: rescan failed: %v\n", err)
+		}
+	})
+	bcast := &net.UDPAddr{IP: net.IPv4bcast, Port: s.cfg.Port}
+	go s.every(ctx, defaults.BroadcastInterval, func() { s.BroadcastTo(bcast) })
+
+	srv := &http.Server{Handler: s.handler, ReadHeaderTimeout: readHeaderTimeout}
+	go func() {
+		<-ctx.Done()
+		shutdown, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		srv.Shutdown(shutdown)
+	}()
+	fmt.Printf("-> Serving %d packages from %s on %s (auth: %s)\n", len(s.store.Catalog()), s.cfg.PackagesDir, ln.Addr(), s.cfg.Auth)
+	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
+}
+
+// readHeaderTimeout stops slow clients from holding connections open.
+const readHeaderTimeout = 30 * time.Second
+
+func (s *Server) every(ctx context.Context, interval time.Duration, f func()) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			f()
+		}
+	}
 }

@@ -125,6 +125,7 @@ go build -o yapl ./cmd/yapl/
 
 ```bash
 go test ./...
+go test -race ./...      # CI: ./go-batect test
 go test -v ./internal/...
 ```
 

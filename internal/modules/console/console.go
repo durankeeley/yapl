@@ -67,6 +67,11 @@ func (Module) Commands() []kernel.Command {
 	}}
 }
 
+// stopSignal ends the console on Ctrl+C or SIGTERM; tests replace it.
+var stopSignal = func() (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+}
+
 type options struct {
 	Port         int
 	Server       string
@@ -91,7 +96,7 @@ func run(ctx *kernel.Context) error {
 	}
 	defer inst.Close()
 
-	sig, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	sig, stop := stopSignal()
 	defer stop()
 	if !ctx.Bool("no-browser") {
 		openBrowser(inst, !ctx.Bool("windowed"), stop, ctx.Stdout)

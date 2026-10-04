@@ -50,6 +50,7 @@ func (a *Archive) Extract(destPath string, stripTopLevelDir bool) error {
 	if err != nil {
 		return err
 	}
+	defer closeDecompressor(decompressedReader)
 	return extractTar(decompressedReader, destPath, stripTopLevelDir)
 }
 
@@ -76,8 +77,12 @@ func ExtractVerified(r io.Reader, format, dest, wantSHA string, wantSize int64) 
 	if err != nil {
 		return err
 	}
-	if err := extractTar(dec, dest, false); err != nil {
-		return err
+	extractErr := extractTar(dec, dest, false)
+	// zstd decodes in a background goroutine that keeps reading the tee;
+	// it must stop before the stream is drained and the hash read.
+	closeDecompressor(dec)
+	if extractErr != nil {
+		return extractErr
 	}
 	// Compressors and tar leave padding after the last entry; drain it so
 	// the hash covers the whole stream.
@@ -92,6 +97,17 @@ func ExtractVerified(r io.Reader, format, dest, wantSHA string, wantSize int64) 
 		return fmt.Errorf("%w: got %d bytes with sha256 %s, expected %d bytes with %s", ErrChecksum, counter.n, got, wantSize, wantSHA)
 	}
 	return nil
+}
+
+// closeDecompressor releases a decompressor's resources and, for zstd,
+// waits for its background reader to stop.
+func closeDecompressor(r io.Reader) {
+	switch c := r.(type) {
+	case interface{ Close() }:
+		c.Close()
+	case io.Closer:
+		c.Close()
+	}
 }
 
 func decompressor(r io.Reader, format string) (io.Reader, error) {

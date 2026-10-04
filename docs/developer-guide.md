@@ -21,6 +21,7 @@ The output binary has no external runtime dependencies. Copy it anywhere.
 
 ```bash
 go test ./...                        # all packages
+go test -race ./...                  # what CI runs (./go-batect test); pull, jobs and sessions are concurrent
 go test -v ./internal/archive/      # verbose for one package
 ```
 
@@ -216,7 +217,7 @@ An upload is staged in `<root>/.uploads/upload-*`. The archive part is hashed as
 `yapl push`: checks `/v1/info` (API version, `push_enabled`), packages into a temp directory, uploads each missing component (from `proton/<v>`, `dependencies/<kind>/<v>`, or a custom `path`, with machine-specific fields stripped by `manifest.PortableVersionInfo`), then the package.
 
 ### `internal/server/server.go`
-Composes store + API, rescans every `defaults.ManifestRefreshInterval` and broadcasts `YAPL:<port>` every `defaults.BroadcastInterval`. The `serve` command passes the kernel and module versions in for `/v1/info`.
+`Start` listens on the configured port and calls `Serve(ctx, listener)`, which tests drive with a `:0` listener and a cancellable context. Composes store + API, rescans every `defaults.ManifestRefreshInterval` and broadcasts `YAPL:<port>` every `defaults.BroadcastInterval`. The `serve` command passes the kernel and module versions in for `/v1/info`.
 
 ### `internal/client/client.go`
 The LAN package client. Connects to a YAPL server to list available packages or download one. `Download` returns the archive path and the entry type (`"game"` or `"app"`) so the caller can extract to the right directory. `Discover`/`DiscoverFrom` listen for the server's UDP broadcast and return the server address. Handles auth headers, reports download progress, and cleans up partial files on failure.

@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net"
@@ -170,6 +171,46 @@ func TestBinaryOffer(t *testing.T) {
 		defer resp.Body.Close()
 		if body, _ := io.ReadAll(resp.Body); string(body) != "ELF" {
 			t.Fatalf("body = %q", body)
+		}
+	})
+}
+
+func TestServe(t *testing.T) {
+	t.Run("given a listener when served then the API answers until the context is cancelled", func(t *testing.T) {
+		// Given
+		s, err := server.New(server.Config{PackagesDir: packagesDir(t, map[string]string{"Doom.tar.xz": "doom"}), Auth: "open", Port: 0, Warnings: io.Discard})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+
+		// When
+		go func() { done <- s.Serve(ctx, ln) }()
+		resp, err := http.Get("http://" + ln.Addr().String() + "/v1/packages")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var cat []api.CatalogEntry
+		json.NewDecoder(resp.Body).Decode(&cat)
+		resp.Body.Close()
+		cancel()
+
+		// Then
+		if len(cat) != 1 {
+			t.Fatalf("catalog = %+v", cat)
+		}
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("serve returned %v", err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatal("serve did not stop after cancellation")
 		}
 	})
 }

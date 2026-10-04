@@ -2,7 +2,6 @@ package dependency
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -133,7 +132,7 @@ func install(name, version, installPath, prefixPath string, dlls []string) error
 		srcPath := filepath.Join(sourceDir, file)
 		dstPath := filepath.Join(destDir, file)
 		if err := fs.CopyFile(srcPath, dstPath); err != nil {
-			log.Printf("⚠️  Failed to copy %s: %v", file, err)
+			fmt.Fprintf(os.Stderr, "warning: failed to copy %s: %v\n", file, err)
 		}
 	}
 	return nil

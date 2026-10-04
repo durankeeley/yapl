@@ -45,6 +45,14 @@ tasks:
       container: golang
       command: env GOOS=linux GOARCH=amd64 go build -o "yapl" -buildvcs=false "./cmd/yapl"
 
+  test:
+    description: Runs every test with the race detector (the console and pull paths are concurrent)
+    shell: true
+    shell_executable: sh
+    run:
+      container: golang
+      command: go test -race -buildvcs=false ./...
+
   # ── wine-builder v1 (Kron4ek-optimised, GCC, debian:bookworm) ─────────
   build-wine:
     description: "v1: Builds the latest Wine (dual 64+32)"

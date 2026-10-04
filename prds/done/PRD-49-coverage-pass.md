@@ -1,6 +1,6 @@
 # PRD-49 - Test Coverage Pass for Long-Running and Legacy Paths
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** Medium
 **Size:** M
 **Sprint:** Phase 3 follow-up
@@ -29,8 +29,14 @@
 
 ## 4. Execution & Milestones
 
-- [ ] `server.Serve` + tests.
-- [ ] Console browser tests.
-- [ ] Dependency download/install tests.
-- [ ] Container and umu launch tests.
-- [ ] Coverage reported in the final summary.
+- [x] `server.Serve` + tests.
+- [x] Console browser tests.
+- [x] Dependency download/install tests.
+- [x] Container and umu launch tests.
+- [x] Coverage reported in the final summary.
+
+## Outcome
+
+* Coverage: server 54→75%, modules/console 38→87%, dependency 54→88%, command 60→79%; whole project 83%.
+* Running the suite with `-race` exposed a real bug: `ExtractVerified` drained and hashed a zstd stream while the zstd decoder's background goroutine was still reading it, which could produce a wrong checksum. Decompressors are now closed (zstd's `Close` waits for its goroutine) before draining, `Archive.Extract` no longer leaks that goroutine, and `batect.yml` gains a `test` task running `go test -race`.
+* `log.Printf` calls left in `command` and `dependency` were replaced with stderr writes, per the coding standards.
