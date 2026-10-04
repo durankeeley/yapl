@@ -1,6 +1,6 @@
 # PRD-42 - Registry API v1 and Versioned Storage
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** High
 **Size:** L
 **Sprint:** Phase 2 — Registry server
