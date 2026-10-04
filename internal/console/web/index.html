@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YAPL Console</title>
+  <link rel="stylesheet" href="app.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">YAPL</div>
+    <nav class="tabs" id="tabs" aria-label="Sections">
+      <span class="hint-glyph" aria-hidden="true">LB</span>
+      <button class="tab" data-tab="0" type="button">Library</button>
+      <button class="tab" data-tab="1" type="button">Store</button>
+      <button class="tab" data-tab="2" type="button">System</button>
+      <span class="hint-glyph" aria-hidden="true">RB</span>
+    </nav>
+    <div class="status">
+      <span id="pad-status" class="pad-status" title="Controller"></span>
+      <time id="clock"></time>
+    </div>
+  </header>
+
+  <main id="view" class="view" aria-live="polite"></main>
+
+  <div id="overlay" class="overlay" hidden></div>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <footer class="hints" aria-hidden="true">
+    <span><b class="btn btn-a">A</b> Select</span>
+    <span><b class="btn btn-b">B</b> Back</span>
+    <span><b class="btn btn-x">X</b> Details</span>
+    <span><b class="btn btn-start">START</b> Play</span>
+    <span><b class="btn">LB</b><b class="btn">RB</b> Switch</span>
+  </footer>
+</body>
+</html>

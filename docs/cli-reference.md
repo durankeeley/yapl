@@ -44,6 +44,32 @@ yapl version
 yapl version --output json
 ```
 
+## `yapl console`
+
+Open the full-screen, gamepad-friendly launcher
+
+```
+yapl console [flags]
+```
+
+Serves the console on 127.0.0.1 and opens it full-screen in the first available browser (Chromium, Chrome, Brave, Edge, Firefox). Browse the library, install and update games from the LAN server, and play — all with a controller. The server is --server, else the one in client.json, else one found on the LAN; without one the console runs offline with the local library. Closing a kiosk window YAPL opened quits the console.
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--auth <mode>` | Auth mode: open or password. | `open` |
+| `--no-browser` | Only print the console's URL. |  |
+| `--password <string>` | Password for password auth (default $YAPL_PASSWORD). |  |
+| `--port <port>` | Loopback port to serve the console on. | `8472` |
+| `--server <address>` | Server address (host:port or URL). |  |
+| `--windowed` | Open an app window instead of full-screen kiosk mode. |  |
+
+```bash
+yapl console
+yapl --workdir /opt/lan-games console
+yapl console --windowed
+yapl console --no-browser --port 9000
+```
+
 ## `yapl setup`
 
 Create a prefix and download dependencies

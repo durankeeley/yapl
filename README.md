@@ -92,6 +92,41 @@ YAPL automatically finds the game in `games/` or `apps/` — you never need to s
 
 -----
 
+## Console mode — the couch experience
+
+```bash
+./yapl console
+```
+
+`console` opens a full-screen launcher built for a controller: power on, pick a game, play.
+
+* **Library**: your installed games as cover-art tiles. Press **A** to play (or open details if the game isn't installed yet). **X** opens details: description, players, version, Play / Update / Uninstall.
+* **Store**: everything on the LAN server, with **Installed** and **Update** badges. Install with **A**; a progress bar fills on the tile while the game and any missing Proton/runtime download and verify.
+* **System**: server status, this machine's library and platform, connected controllers, and every YAPL module's version.
+* **Now playing**: while a game runs, the console shows it with a *Stop game* option. Games run as a separate `yapl run` process, so a crash never takes the console down. Each run's output is saved to `games/<name>/last-run.log`.
+
+| Controller | Keyboard | Action |
+|---|---|---|
+| D-pad / left stick | Arrow keys | Move |
+| A | Enter | Select |
+| B | Esc / Backspace | Back |
+| X | X | Details |
+| LB / RB | Q / E | Switch tab |
+| Start | Space | Play |
+
+How it starts:
+
+* The console runs on `http://127.0.0.1:8472` and opens in the first browser it finds: Chromium, Chrome, Brave, Edge, then Firefox, then the default browser via `xdg-open`. It runs as a full-screen kiosk with its own browser profile (`<library>/.console-browser`), so your normal browser and its tabs aren't touched. Closing that kiosk window quits the console.
+* The server is `--server`, else the one remembered in `client.json`, else one found on the LAN. With no server the console still runs offline with the local library.
+* `--windowed` opens a normal app window, `--no-browser` only prints the URL, and `--port` changes the port.
+* The console only answers on loopback addresses, and every action needs a header that ordinary web pages can't send, so a website can't control your games through it.
+
+Point it at a library from anywhere, for example from an autostart entry:
+
+```bash
+yapl --workdir /opt/lan-games console
+```
+
 ## Command Reference
 
 | Command                        | Description                                                                      |
@@ -109,6 +144,7 @@ YAPL automatically finds the game in `games/` or `apps/` — you never need to s
 | `pull --server <addr> <name>`  | Downloads and unpackages a game from a YAPL server.                              |
 | `push <name>`                  | Publishes a game and any components the server lacks.                            |
 | `upgrade [name\|self\|catalog]` | Upgrades only the parts whose version changed.                                   |
+| `console`                      | Opens the full-screen, gamepad-driven launcher.                                  |
 | `version`                      | Shows the version of the kernel and each module.                                 |
 | `help [command]`               | Shows all commands, or one command's flags and examples.                         |
 

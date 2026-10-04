@@ -1,6 +1,6 @@
 # PRD-47 - `yapl console`: Gamepad-First Full-Screen Launcher
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** L
 **Sprint:** Phase 3 — Console client
@@ -25,7 +25,7 @@
 ## 3. Scope & Design Details
 
 ### Screens
-* **Library** — grid of cover tiles (generated gradient tile with initials when no cover). A = details, Start = play.
+* **Library** — grid of cover tiles (generated gradient tile with initials when no cover). A = play when installed, otherwise details; X = details; Start = play.
 * **Store** — server catalog; badges: Installed / Update available. A = install; progress bar on the tile while the job runs.
 * **Details** — title, version, description, players, tags; buttons Play / Update / Uninstall (uninstall asks for a second confirm).
 * **System** — yapl and module versions, server address and status, workdir.
@@ -51,10 +51,10 @@
 
 ## 4. Execution & Milestones
 
-- [ ] `nav.js` spatial navigation + input mapping, with node tests.
-- [ ] Embedded assets served with correct content types; Go tests check every referenced asset exists.
-- [ ] Browser selection tests (fake PATH with stub executables).
-- [ ] `console` command; README "Console mode" section with screenshots-in-words.
+- [x] `nav.js` spatial navigation + input mapping, with node tests.
+- [x] Embedded assets served with correct content types; Go tests check every referenced asset exists.
+- [x] Browser selection tests (fake PATH with stub executables).
+- [x] `console` command; README "Console mode" section with screenshots-in-words.
 
 ### Acceptance scenarios
 * **Given** tiles in a 3-column grid **when** focus is on tile 1 and I press Down **then** focus moves to tile 4.

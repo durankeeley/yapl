@@ -163,9 +163,9 @@ All the interesting code lives under `internal/`. Here's what each package does:
 cmd/yapl/main.go ── registers ──► internal/kernel ◄── Module{Name, Version, Commands}
                                         │
               ┌─────────────────────────┼──────────────────────────┐
-   internal/modules/lifecycle   internal/modules/registry   internal/modules/store
-   setup run package unpackage  serve                       pull
-   info list clean
+   internal/modules/lifecycle   internal/modules/registry   internal/modules/store   internal/modules/console
+   setup install run package    serve                       pull push upgrade        console
+   unpackage info list clean
 ```
 
 * **`internal/kernel`** owns argument parsing, `help`, `version` and dispatch. Each command gets its own `flag.FlagSet`, so flags are scoped to their command and may appear before or after positional arguments. Usage text, `yapl help` and `docs/cli-reference.md` are all generated from the command registrations.
@@ -297,6 +297,16 @@ The backend of `yapl console` is a loopback-only JSON API built from four parts,
 | GET / POST | `/api/session`, `/api/session/stop` |
 
 Browser safety: a `guard` middleware rejects any `Host` that isn't loopback (DNS rebinding) and any POST/DELETE without the `X-Yapl-Console` header (cross-site requests can't add it without a CORS preflight, which is never granted).
+
+## The console UI (`internal/console/web`)
+
+Plain HTML, CSS and ES modules embedded with `//go:embed` (`internal/console/ui.go`). There is no build step and no framework.
+
+* **`nav.js`**: everything testable without a DOM. Grid and list movement, tab cycling, stick dead zone, held-direction repeat timing, button and key mappings, byte formatting, cover fallbacks. All tunables are named constants. Tests: `web/nav.test.mjs`, run by `node --test` and by `go test` (`TestUILogicWithNode`, skipped when node isn't installed).
+* **`app.js`**: state, rendering and I/O. Server data is only ever written through `el()` (DOM nodes and `textContent`); `go test` fails if `innerHTML` appears. Mutating calls send `X-Yapl-Console: 1`. The gamepad is polled each animation frame; directions repeat after `REPEAT_DELAY_MS`.
+* **`internal/console/browser.go`** picks the browser and builds its arguments (tested with a fake `PATH`). **`internal/modules/console`** wires it together: resolve the server with `internal/connect`, build the service with the embedded UI, listen on `127.0.0.1`, open the browser, and quit on Ctrl+C or when the kiosk window closes.
+
+To look at the UI without a controller, run `yapl console --windowed` and use the keyboard.
 
 ## How to add a new command
 

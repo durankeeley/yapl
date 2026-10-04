@@ -21,6 +21,9 @@ const (
 	// StagingDir holds in-progress downloads inside the library, on the same
 	// filesystem as their destination so finishing is an atomic rename.
 	StagingDir = ".staging"
+	// ConsoleBrowserDir is the browser profile `yapl console` uses, kept
+	// apart from the user's own.
+	ConsoleBrowserDir = ".console-browser"
 	// BundleDir is the directory inside a --bundle-deps archive that carries
 	// Proton, dependencies and runner.json.
 	BundleDir = "_bundle"

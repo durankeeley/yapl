@@ -14,6 +14,7 @@ import (
 	"yapl/internal/catalog"
 	"yapl/internal/client"
 	"yapl/internal/config"
+	connectpkg "yapl/internal/connect"
 	"yapl/internal/defaults"
 	"yapl/internal/kernel"
 	"yapl/internal/manifest"
@@ -45,52 +46,27 @@ func serverFlags(fs *flag.FlagSet) {
 	fs.String("password", "", "Password for password auth (default $"+defaults.PasswordEnv+").")
 }
 
-// connect builds a client for --server, else the server remembered in
-// client.json (when it answers), else one discovered on the LAN.
+// connect resolves the server from --server, client.json or LAN discovery.
 func connect(ctx *kernel.Context) (*client.Client, error) {
 	password := ctx.String("password")
 	if password == "" {
 		password = os.Getenv(defaults.PasswordEnv)
 	}
-	auth := ctx.String("auth")
-	addr := ctx.String("server")
-	if addr == "" {
-		saved, _ := config.LoadClientSettings(paths.ClientConfig)
-		if saved.Server != "" {
-			savedAuth := auth
-			if !ctx.IsSet("auth") && saved.Auth != "" {
-				savedAuth = saved.Auth
-			}
-			c := client.New(client.Config{Server: saved.Server, Auth: savedAuth, Password: password})
-			if reachable(c) {
-				return c, nil
-			}
-			fmt.Fprintf(ctx.Stdout, "-> Saved server %s is not answering; discovering YAPL server on LAN...\n", saved.Server)
-		} else {
-			fmt.Fprintln(ctx.Stdout, "-> No --server specified; discovering YAPL server on LAN...")
-		}
-		found, err := client.Discover(ctx.Int("port"), defaults.DiscoveryTimeout)
-		if err != nil {
-			return nil, fmt.Errorf("%w\n   Pass --server <host:port> to name the server", err)
-		}
-		addr = found
-		fmt.Fprintf(ctx.Stdout, "-> Found server at %s\n", addr)
-	}
-	return client.New(client.Config{Server: addr, Auth: auth, Password: password}), nil
-}
-
-// reachable reports whether a server answers at all; older servers answer
-// /v1/info with 404 or 401, which still proves they are there.
-func reachable(c *client.Client) bool {
-	_, err := c.Info()
-	return err == nil || errors.Is(err, client.ErrNotFound) || errors.Is(err, client.ErrUnauthorized)
+	return connectpkg.Connect(connectpkg.Options{
+		Server:        ctx.String("server"),
+		Auth:          ctx.String("auth"),
+		AuthExplicit:  ctx.IsSet("auth"),
+		Password:      password,
+		SettingsPath:  paths.ClientConfig,
+		Discover:      true,
+		DiscoveryPort: ctx.Int("port"),
+	}, ctx.Stdout)
 }
 
 // remember saves the server that just worked so later commands (and the
-// console) skip discovery. The password is never written.
+// console) skip discovery.
 func remember(ctx *kernel.Context, c *client.Client) {
-	settings := config.ClientSettings{Server: c.Server(), Auth: ctx.String("auth")}
-	if err := config.SaveClientSettings(paths.ClientConfig, settings); err != nil {
+	if err := connectpkg.Remember(paths.ClientConfig, c, ctx.String("auth")); err != nil {
 		fmt.Fprintf(ctx.Stderr, "warning: could not save %s: %v\n", paths.ClientConfig, err)
 	}
 }

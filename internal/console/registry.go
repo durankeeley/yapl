@@ -1,10 +1,10 @@
 package console
 
 import (
-	"errors"
 	"io"
 
 	"yapl/internal/client"
+	"yapl/internal/connect"
 	"yapl/internal/manifest"
 	"yapl/internal/progress"
 	"yapl/internal/pull"
@@ -30,10 +30,7 @@ type remote struct{ c *client.Client }
 
 func (r remote) Server() string { return r.c.Server() }
 
-func (r remote) Reachable() bool {
-	_, err := r.c.Info()
-	return err == nil || errors.Is(err, client.ErrNotFound) || errors.Is(err, client.ErrUnauthorized)
-}
+func (r remote) Reachable() bool { return connect.Reachable(r.c) }
 
 func (r remote) Catalog() ([]api.CatalogEntry, error) { return r.c.Catalog() }
 
