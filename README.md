@@ -247,6 +247,43 @@ Add a `"winetricks"` array to `game.json` to install Windows redistributables in
 
 YAPL reads `prefix/winetricks.log` before each run and skips any packages already recorded there, so repeated `run` or `setup` calls only install what is actually missing.
 
+### Config overrides — multiple setups per game
+
+Use `--config <file>` to load a different JSON config from the game's directory instead of the default `game.json`. All configs in the same directory share the same Wine prefix, so you can have several launch profiles without re-installing anything.
+
+This is useful when a game has multiple mods or executables that need different settings. For example, Counter-Strike 1.5 alongside the base Half-Life install:
+
+```
+games/HalfLife/
+  game.json          ← default: launches hl.exe
+  cstrike.json       ← Counter-Strike 1.5: launches hl.exe -game cstrike
+  dod.json           ← Day of Defeat: launches hl.exe -game dod
+  prefix/            ← shared Wine prefix used by all three configs
+```
+
+`cstrike.json`:
+
+```json
+{
+  "proton_version": "ge-proton-9",
+  "launch_method": "direct",
+  "executable": "drive_c/Games/HalfLife/hl.exe",
+  "launch_args": ["-game", "cstrike", "-steam", "-nointro"]
+}
+```
+
+Run a specific config:
+
+```bash
+./yapl run "HalfLife" --config cstrike.json
+./yapl run "HalfLife" --config dod.json
+./yapl setup game "HalfLife" --config cstrike.json
+```
+
+`setup` with `--config` will create the named file if it does not exist, using the same defaults as a normal `setup`. The prefix is still initialised in `games/HalfLife/prefix/` regardless of which config file is used.
+
+---
+
 ## Flags
 
 | Flag                    | Description                                                                                                    |

@@ -18,23 +18,23 @@ Sprints are ordered by dependency and impact. Earlier sprints produce a cleaner,
 
 ---
 
-## Sprint 2 — Reliability (Error Propagation)
+## Sprint 2 — Reliability (Error Propagation) ✅ Complete
 **Theme:** YAPL currently swallows several network and I/O errors silently. Every PRD here fixes the same class of bug in the same layer of the code. Doing them together means each file is touched once, not five times across five PRs.
 
-| PRD | Title | Size |
-|-----|-------|------|
-| PRD-6  | Add HTTP timeout to runtime HTTP client | S |
-| PRD-17 | Validate HTTP status code before reading runtime response body | S |
-| PRD-18 | Propagate extraction errors from `Unpackage` | S |
-| PRD-21 | Return `steam_appid.txt` write error instead of logging and continuing | S |
-| PRD-24 | Propagate runtime version-check errors instead of swallowing | S |
+| PRD | Title | Size | Status |
+|-----|-------|------|--------|
+| PRD-6  | Add HTTP timeout to runtime HTTP client | S | ✅ Done |
+| PRD-17 | Validate HTTP status code before reading runtime response body | S | ✅ Done |
+| PRD-18 | Propagate extraction errors from `Unpackage` | S | ✅ Done |
+| PRD-21 | Return `steam_appid.txt` write error instead of logging and continuing | S | ✅ Done |
+| PRD-24 | Propagate runtime version-check errors instead of swallowing | S | ✅ Done |
 
 **Why together:** All five are in the same problem family — silent failures in I/O paths. A user can't tell the difference between "download succeeded" and "download failed silently" right now. Fixing all five in one sprint closes the whole class.
 
 ---
 
 ## Sprint 3 — Validation & Deployment Flexibility
-**Theme:** Catch bad config early rather than failing mid-run, and let YAPL be invoked from anywhere (scripts, desktop launchers, systemd services). PRD-8 is foundational for PRD-19 and PRD-25 (Sprint 5). PRD-20 is foundational for PRD-26.
+**Theme:** Catch bad config early rather than failing mid-run, let YAPL be invoked from anywhere, and manage the host environment around game launches. PRD-8 is foundational for PRD-19, PRD-25 (Sprint 5), and PRD-35. PRD-20 is foundational for PRD-26.
 
 | PRD | Title | Size |
 |-----|-------|------|
@@ -42,8 +42,9 @@ Sprints are ordered by dependency and impact. Earlier sprints produce a cleaner,
 | PRD-19 | DXVK DirectX version validation (`"9"`, `"10"`, or `"11"` only) | S |
 | PRD-20 | Centralise directory path constants into `internal/paths` | S |
 | PRD-26 | `--workdir <path>` global flag for non-CWD deployments | M |
+| PRD-35 | Display resolution management — switch host display + patch game configs around `run` | L |
 
-**Why together:** PRD-8 + PRD-19 both validate config fields — they share the same validation infrastructure. PRD-20 + PRD-26 both deal with how YAPL resolves paths — PRD-20 refactors path strings into constants, and PRD-26 adds the ability to root those paths at an arbitrary directory.
+**Why together:** PRD-8 + PRD-19 both validate config fields — they share the same validation infrastructure. PRD-20 + PRD-26 both deal with how YAPL resolves paths — PRD-20 refactors path strings into constants, and PRD-26 adds the ability to root those paths at an arbitrary directory. PRD-35 builds on PRD-8's validation pass to validate the `display` config block before attempting any `xrandr` calls.
 
 **kubectl-style note for PRD-26:** `--workdir` is the right name — it mirrors how other tools expose a "context root" override (e.g. `make -C`, `docker-compose --project-directory`). Keep it as a global flag placed before the command.
 
@@ -94,11 +95,12 @@ This writes the `local_archive` entry into `runner.json` automatically.
 ## Dependency Map
 
 ```
-Sprint 1 (clean code)
-  └─► Sprint 2 (reliability) — cleaner code = safer error propagation changes
-        └─► Sprint 3 (validation + workdir)
-              ├─► PRD-8 validates config → PRD-25 (Sprint 5) uses same infra
-              └─► PRD-20 centralises paths → PRD-26 uses them
+Sprint 1 (clean code) ✅
+  └─► Sprint 2 (reliability) ✅
+        └─► Sprint 3 (validation + workdir + display)
+              ├─► PRD-8 validates config → PRD-25 (Sprint 5) + PRD-35 use same infra
+              ├─► PRD-20 centralises paths → PRD-26 uses them
+              └─► PRD-35 display management (depends on PRD-8 for validation pass)
 Sprint 4 (UX) — independent, can start after Sprint 1
 Sprint 5 (wine ecosystem) — PRD-30 independent; PRD-25 needs PRD-8 from Sprint 3
 ```

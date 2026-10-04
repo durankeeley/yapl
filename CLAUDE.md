@@ -133,4 +133,50 @@ Never mark a PRD Complete without checking whether the docs need updating.
 
 ## Skills
 
-Before any task, read `SKILLS/PRD/SKILL/SKILL.md` to understand how to create worktrees and manage PRDs.
+Before any task, read every file inside the `SKILLS/` folder in the project root. Skills provide authoritative guidance on workflows and tooling for this project. Key files:
+
+| Path | Purpose |
+|------|---------|
+| `SKILLS/PRD/SKILL/SKILL.md` | How to create git worktrees and manage PRDs |
+| `SKILLS/PRD/template.md` | Mandatory PRD/Task template |
+| `SKILLS/go-batect.md` | Go and batect conventions |
+
+To load a skill: read the file and follow its instructions before proceeding with the related work.
+
+---
+
+## CLI Design — Kubernetes Style
+
+YAPL's CLI must follow Kubernetes-style conventions. Every new command and flag must conform to this pattern.
+
+### Command structure
+
+```
+yapl <verb> [noun] <name> [flags]
+```
+
+- Verb comes first: `setup`, `run`, `package`, `unpackage`, `info`, `list`, `clean`, `serve`, `pull`
+- Noun qualifies the verb when needed: `setup game`, `unpackage app`
+- Name is the target identifier: `"Doom"`, `"Counter-Strike"`
+- Flags follow at the end
+
+### Flag conventions
+
+- All flags use `--long-name` (double dash, hyphen-separated words)
+- Short single-dash flags (`-f`, `-o`, `-v`) are **not used** — YAPL uses long flags only
+- Boolean flags are named for the positive action: `--bundle-deps`, `--upgrade-proton`, `--yes`
+- Value flags take an argument: `--config <file>`, `--format <type>`, `--server <addr>`
+- Flags are scoped to the command they apply to — document which command each flag belongs to
+
+### Examples of correct style
+
+```bash
+yapl setup game "Doom"
+yapl run "Doom" --debug
+yapl package "Doom" --format zst --bundle-deps --yes
+yapl clean "Doom" --prefix
+yapl serve --packages-dir /srv/games --port 9000
+yapl pull --server 192.168.1.10:8471 "Doom"
+```
+
+Commands should read like plain English sentences. Avoid abbreviations in command or flag names.
