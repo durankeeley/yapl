@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"yapl/internal/config"
 )
 
 // --- Helpers ---
@@ -354,9 +356,9 @@ func TestUnpackage_InstallsBundledProtonToProtonDir(t *testing.T) {
 	gw := gzip.NewWriter(f)
 	tw := tar.NewWriter(gw)
 	for name, content := range map[string]string{
-		"Doom/game.json":              `{}`,
-		"_bundle/proton/ge9/proton":   "#!/bin/sh",
-		"_bundle/runner.json":         `{}`,
+		"Doom/game.json":            `{}`,
+		"_bundle/proton/ge9/proton": "#!/bin/sh",
+		"_bundle/runner.json":       `{}`,
 	} {
 		hdr := &tar.Header{Name: name, Mode: 0644, Size: int64(len(content))}
 		tw.WriteHeader(hdr)
@@ -507,5 +509,37 @@ func TestGetExtensionForFormat_UnknownFormat(t *testing.T) {
 	// Then it returns an error
 	if err == nil {
 		t.Fatal("expected an error for an unsupported format but got nil")
+	}
+}
+
+func TestInstallBundledDeps_MergesRunnerJSONIntoExistingFile(t *testing.T) {
+	// Given a machine that already pulled one game and has its own runner.json
+	d := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(d)
+	defer os.Chdir(orig)
+	os.WriteFile("runner.json", []byte(`{"proton_versions":{"ge8":{"url":"local-ge8"}}}`), 0644)
+
+	// And a second bundle that needs a different Proton version
+	bundleDir := filepath.Join(d, "games", "_bundle")
+	os.MkdirAll(bundleDir, 0755)
+	os.WriteFile(filepath.Join(bundleDir, "runner.json"),
+		[]byte(`{"proton_versions":{"ge8":{"url":"bundled-ge8"},"ge9":{"url":"bundled-ge9"}}}`), 0644)
+
+	// When the bundle is installed
+	if err := installBundledDeps("games"); err != nil {
+		t.Fatalf("installBundledDeps: %v", err)
+	}
+
+	// Then the new version is added and the existing one is untouched
+	g, err := config.LoadGlobal("runner.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.ProtonVersions["ge9"].URL != "bundled-ge9" {
+		t.Errorf("ge9 not merged: %+v", g.ProtonVersions)
+	}
+	if g.ProtonVersions["ge8"].URL != "local-ge8" {
+		t.Errorf("local ge8 overwritten: %+v", g.ProtonVersions["ge8"])
 	}
 }

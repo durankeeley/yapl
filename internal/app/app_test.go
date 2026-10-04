@@ -338,11 +338,11 @@ func makeCleanApp(t *testing.T, dir, name, protonVersion, dxvkVersion, vkd3dVers
 		},
 	})
 	return &App{
-		Type:      "games",
-		Name:      name,
-		AppDir:    appDir,
-		AppConfig: config.App{ProtonVersion: protonVersion, Dependencies: config.AppDependencies{DXVKVersion: dxvkVersion, VKD3DVersion: vkd3dVersion}},
-		PrefixPath: filepath.Join(appDir, "prefix"),
+		Type:         "games",
+		Name:         name,
+		AppDir:       appDir,
+		AppConfig:    config.App{ProtonVersion: protonVersion, Dependencies: config.AppDependencies{DXVKVersion: dxvkVersion, VKD3DVersion: vkd3dVersion}},
+		PrefixPath:   filepath.Join(appDir, "prefix"),
 		GlobalConfig: config.Global{},
 	}
 }
@@ -536,10 +536,10 @@ func TestPackage_ErrorWhenGameDirMissing(t *testing.T) {
 	chdir(t, d)
 
 	a := &App{
-		Type:      "games",
-		Name:      "Ghost",
-		AppDir:    "games/Ghost",
-		AppConfig: config.App{ProtonVersion: "ge9", Executable: "drive_c/game.exe"},
+		Type:       "games",
+		Name:       "Ghost",
+		AppDir:     "games/Ghost",
+		AppConfig:  config.App{ProtonVersion: "ge9", Executable: "drive_c/game.exe"},
 		PrefixPath: "games/Ghost/prefix",
 	}
 

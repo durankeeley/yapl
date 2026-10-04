@@ -1,6 +1,6 @@
 # PRD-37 - Merge Bundled `runner.json` Entries on Unpackage
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** S
 **Sprint:** Phase 0 — Stabilise
@@ -30,10 +30,10 @@
 
 ## 4. Execution & Milestones
 
-- [ ] Gherkin-style tests for `MergeGlobal` (empty local, disjoint, overlapping keys keep local values).
-- [ ] Unpackage test: second bundle adds its Proton entry to an existing `runner.json`.
-- [ ] Implementation; `go test ./...` passes.
-- [ ] README updated (offline bundle section).
+- [x] Gherkin-style tests for `MergeGlobal` (empty local, disjoint, overlapping keys keep local values).
+- [x] Unpackage test: second bundle adds its Proton entry to an existing `runner.json`.
+- [x] Implementation; `go test ./...` passes.
+- [x] README updated (offline bundle section).
 
 ## 5. Technical Notes
 

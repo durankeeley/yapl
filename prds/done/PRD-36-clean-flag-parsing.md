@@ -1,6 +1,6 @@
 # PRD-36 - Fix `clean` Flag Parsing
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** S
 **Sprint:** Phase 0 — Stabilise
@@ -30,10 +30,10 @@
 
 ## 4. Execution & Milestones
 
-- [ ] Failing CLI tests for `clean` written and confirmed failing.
-- [ ] Flags registered before parse.
-- [ ] `go test ./...` passes.
-- [ ] README/CLI help reviewed.
+- [x] Failing CLI tests for `clean` written and confirmed failing.
+- [x] Flags registered before parse.
+- [x] `go test ./...` passes.
+- [x] README/CLI help reviewed.
 
 ## 5. Technical Notes
 

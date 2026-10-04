@@ -213,8 +213,10 @@ On the target machine, just run `yapl unpackage` as normal — Proton and depend
 ```bash
 ./yapl unpackage game Doom.tar.xz
 # -> Installing bundled 'ge-proton-9'...
-# -> Installing bundled runner.json...
+# -> Registered bundled proton/ge-proton-9 in runner.json
 ```
+
+The bundle's `runner.json` entries are merged into the target machine's `runner.json`. Versions the machine doesn't know yet are added; versions it already defines are left alone. Pulling several bundled games onto one machine therefore works without editing anything.
 
 Use `--yes` to skip the size confirmation prompt in scripts.
 

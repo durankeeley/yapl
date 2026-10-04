@@ -14,6 +14,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/ulikunitz/xz"
+	"yapl/internal/config"
 	"yapl/internal/fs"
 )
 
@@ -169,18 +170,35 @@ func installBundledDeps(targetDir string) error {
 		}
 	}
 
-	// Install runner.json only if one does not already exist.
 	bundledRunner := filepath.Join(bundleDir, "runner.json")
 	if _, err := os.Stat(bundledRunner); err == nil {
-		if _, err := os.Stat("runner.json"); os.IsNotExist(err) {
-			fmt.Println("-> Installing bundled runner.json...")
-			if err := fs.CopyFile(bundledRunner, "runner.json"); err != nil {
-				return fmt.Errorf("install bundled runner.json: %w", err)
-			}
+		if err := mergeBundledRunner(bundledRunner, "runner.json"); err != nil {
+			return err
 		}
 	}
 
 	return os.RemoveAll(bundleDir)
+}
+
+// mergeBundledRunner adds the bundle's version entries to the local runner
+// config so later pulls can reference the components they installed.
+func mergeBundledRunner(bundledPath, localPath string) error {
+	bundled, err := config.LoadGlobal(bundledPath)
+	if err != nil {
+		return fmt.Errorf("read bundled runner.json: %w", err)
+	}
+	local, err := config.LoadGlobal(localPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read runner.json: %w", err)
+	}
+	merged, added := config.MergeGlobal(local, bundled)
+	for _, key := range added {
+		fmt.Printf("-> Registered bundled %s in runner.json\n", key)
+	}
+	if err := config.SaveGlobal(localPath, merged); err != nil {
+		return fmt.Errorf("write runner.json: %w", err)
+	}
+	return nil
 }
 
 func (a *Archive) open() (io.ReadCloser, error) {

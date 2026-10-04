@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"yapl/internal/fs"
@@ -171,6 +172,52 @@ func LoadOrCreateApp(appType, appName, configName string, globalCfg Global, defa
 	}
 	fmt.Printf("✅ Default %s created.\n", configFileName)
 	return defaultCfg, nil
+}
+
+// LoadGlobal reads runner.json without creating a default when it is missing.
+func LoadGlobal(path string) (Global, error) {
+	var g Global
+	err := readJSONFile(path, &g)
+	return g, err
+}
+
+// SaveGlobal writes g to path as indented JSON.
+func SaveGlobal(path string, g Global) error {
+	return writeJSONFile(path, g)
+}
+
+// MergeGlobal adds every version from bundled that local does not define.
+// Local entries always win. It returns the merged config and the sorted
+// "kind/version" keys that were added, without mutating local.
+func MergeGlobal(local, bundled Global) (Global, []string) {
+	var added []string
+	merged := Global{
+		ProtonVersions:     mergeVersions(local.ProtonVersions, bundled.ProtonVersions, "proton", &added),
+		RuntimeVersions:    mergeVersions(local.RuntimeVersions, bundled.RuntimeVersions, "runtime", &added),
+		DependencyVersions: map[string]map[string]VersionInfo{},
+	}
+	for kind, versions := range local.DependencyVersions {
+		merged.DependencyVersions[kind] = versions
+	}
+	for kind, versions := range bundled.DependencyVersions {
+		merged.DependencyVersions[kind] = mergeVersions(local.DependencyVersions[kind], versions, "dependencies/"+kind, &added)
+	}
+	sort.Strings(added)
+	return merged, added
+}
+
+func mergeVersions(local, bundled map[string]VersionInfo, label string, added *[]string) map[string]VersionInfo {
+	out := make(map[string]VersionInfo, len(local)+len(bundled))
+	for k, v := range local {
+		out[k] = v
+	}
+	for k, v := range bundled {
+		if _, exists := out[k]; !exists {
+			out[k] = v
+			*added = append(*added, label+"/"+k)
+		}
+	}
+	return out
 }
 
 // LoadApp reads an existing app config file without creating one if missing.

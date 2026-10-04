@@ -38,6 +38,12 @@ func main() {
 	// pull flags
 	serverAddr := flag.String("server", "", "YAPL server address (host:port or URL). Auto-discovered when omitted.")
 	outputDir := flag.String("output-dir", "", "Directory to save downloaded archive before unpackaging (default: system temp).")
+
+	// clean flags
+	cleanPrefix := flag.Bool("prefix", false, "Delete the game/app prefix directory.")
+	cleanProton := flag.Bool("proton", false, "Delete the downloaded Proton version.")
+	cleanDeps := flag.Bool("deps", false, "Delete DXVK and VKD3D for this game's configured versions.")
+	cleanAll := flag.Bool("all", false, "Equivalent to --prefix --proton --deps.")
 	// Go's flag package stops at the first non-flag argument, so flags placed after
 	// positional args (e.g. "yapl package game --bundle-deps") are never parsed.
 	// Reorder args to move all flags before positional args before calling Parse.
@@ -137,12 +143,6 @@ func main() {
 		if name == "" {
 			log.Fatalf("❌ Usage: yapl clean <name> [--prefix] [--proton] [--deps] [--all]")
 		}
-		cleanPrefix := flag.Bool("prefix", false, "Delete the game/app prefix directory.")
-		cleanProton := flag.Bool("proton", false, "Delete the downloaded Proton version.")
-		cleanDeps := flag.Bool("deps", false, "Delete DXVK and VKD3D for this game's configured versions.")
-		cleanAll := flag.Bool("all", false, "Equivalent to --prefix --proton --deps.")
-		flag.Parse()
-
 		if !*cleanPrefix && !*cleanProton && !*cleanDeps && !*cleanAll {
 			log.Fatalf("❌ Specify at least one of: --prefix, --proton, --deps, --all")
 		}

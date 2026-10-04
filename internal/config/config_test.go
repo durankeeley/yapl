@@ -389,3 +389,96 @@ func TestVersionInfo_DoesNotContainPythonFields(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeGlobal(t *testing.T) {
+	proton := func(url string) map[string]VersionInfo { return map[string]VersionInfo{"ge9": {URL: url}} }
+
+	tests := []struct {
+		name        string
+		local       Global
+		bundled     Global
+		wantProton  string
+		wantAdded   []string
+		wantDXVKURL string
+	}{
+		{
+			name:       "given an empty local config when a bundle is merged then every bundled entry is added",
+			local:      Global{},
+			bundled:    Global{ProtonVersions: proton("bundled"), DependencyVersions: map[string]map[string]VersionInfo{"dxvk": {"2.4": {URL: "dxvk"}}}},
+			wantProton: "bundled", wantDXVKURL: "dxvk",
+			wantAdded: []string{"dependencies/dxvk/2.4", "proton/ge9"},
+		},
+		{
+			name:       "given a local entry with the same key when a bundle is merged then the local entry wins",
+			local:      Global{ProtonVersions: proton("local")},
+			bundled:    Global{ProtonVersions: proton("bundled")},
+			wantProton: "local",
+			wantAdded:  nil,
+		},
+		{
+			name:       "given a bundled runtime the local config lacks when merged then the runtime is added",
+			local:      Global{ProtonVersions: proton("local")},
+			bundled:    Global{RuntimeVersions: map[string]VersionInfo{"sniper": {URL: "rt"}}},
+			wantProton: "local",
+			wantAdded:  []string{"runtime/sniper"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// When
+			merged, added := MergeGlobal(tc.local, tc.bundled)
+
+			// Then
+			if got := merged.ProtonVersions["ge9"].URL; got != tc.wantProton {
+				t.Errorf("proton ge9 url = %q, want %q", got, tc.wantProton)
+			}
+			if tc.wantDXVKURL != "" && merged.DependencyVersions["dxvk"]["2.4"].URL != tc.wantDXVKURL {
+				t.Errorf("dxvk 2.4 not merged: %+v", merged.DependencyVersions)
+			}
+			if strings.Join(added, ",") != strings.Join(tc.wantAdded, ",") {
+				t.Errorf("added = %v, want %v", added, tc.wantAdded)
+			}
+		})
+	}
+}
+
+func TestMergeGlobal_DoesNotMutateLocal(t *testing.T) {
+	// Given
+	local := Global{ProtonVersions: map[string]VersionInfo{"a": {}}}
+
+	// When
+	MergeGlobal(local, Global{ProtonVersions: map[string]VersionInfo{"b": {}}})
+
+	// Then
+	if _, ok := local.ProtonVersions["b"]; ok {
+		t.Fatal("MergeGlobal mutated the local config map")
+	}
+}
+
+func TestSaveAndLoadGlobal_RoundTrip(t *testing.T) {
+	// Given
+	path := filepath.Join(t.TempDir(), "runner.json")
+	want := Global{ProtonVersions: map[string]VersionInfo{"ge9": {URL: "u"}}}
+
+	// When
+	if err := SaveGlobal(path, want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadGlobal(path)
+
+	// Then
+	if err != nil || got.ProtonVersions["ge9"].URL != "u" {
+		t.Fatalf("round trip failed: %+v, %v", got, err)
+	}
+}
+
+func TestLoadGlobal_MissingFileReturnsNotExist(t *testing.T) {
+	// Given / When
+	_, err := LoadGlobal(filepath.Join(t.TempDir(), "missing.json"))
+
+	// Then
+	if !os.IsNotExist(err) {
+		t.Fatalf("expected not-exist error, got %v", err)
+	}
+}
