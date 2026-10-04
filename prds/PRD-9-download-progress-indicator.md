@@ -1,6 +1,6 @@
 # PRD-9 - Download Progress Indicator
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** Medium
 **Size:** M
 **Sprint:** Phase 1 — Out-of-the-box foundation
