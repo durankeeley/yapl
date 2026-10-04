@@ -1,6 +1,6 @@
 # PRD-44 - Pull v2: Tags, Verified Streaming Install, Components, Remembered Server
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** L
 **Sprint:** Phase 2 — Registry server
@@ -44,10 +44,10 @@ yapl pull list
 
 ## 4. Execution & Milestones
 
-- [ ] Streaming verified install with tests: success, checksum mismatch leaves no directory, already-installed error.
-- [ ] Component install + runner registration tests.
-- [ ] `ParseReference` table tests; legacy fallback test.
-- [ ] `client.json` persistence tests; README "Pulling games" rewritten.
+- [x] Streaming verified install with tests: success, checksum mismatch leaves no directory, already-installed error.
+- [x] Component install + runner registration tests.
+- [x] `ParseReference` table tests; legacy fallback test.
+- [x] `client.json` persistence tests; README "Pulling games" rewritten.
 
 ### Acceptance scenarios
 * **Given** Doom 1.2.0 on the server using GE-Proton11-7 **and** a client without that Proton **when** I `pull Doom` **then** `games/Doom`, `proton/GE-Proton11-7` and its `runner.json` entry all exist, and `installed.json` says 1.2.0.

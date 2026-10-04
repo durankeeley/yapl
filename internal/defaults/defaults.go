@@ -23,6 +23,10 @@ const (
 	// over slow links need the headroom).
 	DownloadTimeout = 30 * time.Minute
 
+	// PasswordEnv supplies the registry password when --password is not
+	// given, so it stays out of shell history and desktop entries.
+	PasswordEnv = "YAPL_PASSWORD"
+
 	PackageFormat = "xz"
 	LaunchMethod  = "container"
 	AuthMode      = "open"

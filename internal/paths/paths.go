@@ -10,6 +10,7 @@ const HomeEnv = "YAPL_HOME"
 
 const (
 	RunnerConfig    = "runner.json"
+	ClientConfig    = "client.json"
 	ProtonDir       = "proton"
 	DependenciesDir = "dependencies"
 	GamesDir        = "games"
@@ -17,6 +18,9 @@ const (
 	PrefixDir       = "prefix"
 	GameConfig      = "game.json"
 	AppConfig       = "app.json"
+	// StagingDir holds in-progress downloads inside the library, on the same
+	// filesystem as their destination so finishing is an atomic rename.
+	StagingDir = ".staging"
 	// BundleDir is the directory inside a --bundle-deps archive that carries
 	// Proton, dependencies and runner.json.
 	BundleDir = "_bundle"

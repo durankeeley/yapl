@@ -61,6 +61,48 @@ type Result struct {
 	SizeBytes int64
 }
 
+// ErrChecksum means downloaded bytes do not match their manifest.
+var ErrChecksum = errors.New("checksum mismatch")
+
+// ExtractVerified extracts a compressed tar stream into dest while hashing
+// the compressed bytes. When wantSHA is set, the stream's SHA-256 (and
+// wantSize, when not negative) must match or ErrChecksum is returned; the
+// caller extracts into a staging directory and discards it on error.
+func ExtractVerified(r io.Reader, format, dest, wantSHA string, wantSize int64) error {
+	hasher := sha256.New()
+	counter := &countingWriter{}
+	tee := io.TeeReader(r, io.MultiWriter(hasher, counter))
+	dec, err := decompressor(tee, format)
+	if err != nil {
+		return err
+	}
+	if err := extractTar(dec, dest, false); err != nil {
+		return err
+	}
+	// Compressors and tar leave padding after the last entry; drain it so
+	// the hash covers the whole stream.
+	if _, err := io.Copy(io.Discard, tee); err != nil {
+		return fmt.Errorf("read archive: %w", err)
+	}
+	if wantSHA == "" {
+		return nil
+	}
+	got := hex.EncodeToString(hasher.Sum(nil))
+	if got != wantSHA || (wantSize >= 0 && counter.n != wantSize) {
+		return fmt.Errorf("%w: got %d bytes with sha256 %s, expected %d bytes with %s", ErrChecksum, counter.n, got, wantSize, wantSHA)
+	}
+	return nil
+}
+
+func decompressor(r io.Reader, format string) (io.Reader, error) {
+	for _, e := range archiveExtensions {
+		if e.format == format {
+			return getDecompressedReader(r, e.ext)
+		}
+	}
+	return nil, fmt.Errorf("unsupported archive format %q", format)
+}
+
 // Package compresses sourceDir (keeping its name as the top-level directory)
 // into outputDir/<name>.tar.<format>.
 func Package(sourceDir, outputDir, format string) (Result, error) {
@@ -127,7 +169,7 @@ func Unpackage(targetDir string, archivePaths []string) error {
 		fmt.Printf("✅ Successfully unpackaged to '%s'\n", destPath)
 
 		// Install bundled dependencies if the archive contained a _bundle/ dir.
-		if err := installBundledDeps(targetDir); err != nil {
+		if err := InstallBundle(targetDir); err != nil {
 			return fmt.Errorf("bundle install failed: %w", err)
 		}
 	}
@@ -135,9 +177,9 @@ func Unpackage(targetDir string, archivePaths []string) error {
 	return nil
 }
 
-// installBundledDeps processes a _bundle/ directory that may have been extracted
-// into targetDir, installing its contents into the deployment root.
-func installBundledDeps(targetDir string) error {
+// InstallBundle processes a _bundle/ directory that may have been extracted
+// into targetDir, installing its contents into the library root.
+func InstallBundle(targetDir string) error {
 	bundleDir := filepath.Join(targetDir, paths.BundleDir)
 	if _, err := os.Stat(bundleDir); os.IsNotExist(err) {
 		return nil
@@ -295,7 +337,7 @@ func extractTar(r io.Reader, destPath string, stripTopLevelDir bool) error {
 				return fmt.Errorf("mkdir dir: %w", err)
 			}
 		case tar.TypeReg:
-			out, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(hdr.Mode))
+			out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode))
 			if err != nil {
 				return fmt.Errorf("create file: %w", err)
 			}

@@ -31,9 +31,9 @@ const (
 	ManifestFile  = "manifest.json"
 	ComponentsDir = "components"
 	// LatestTag resolves to the highest version of a package.
-	LatestTag = "latest"
+	LatestTag = manifest.LatestTag
 	// LegacyVersion is reported for flat archives that have no sidecar.
-	LegacyVersion = "0.0.0"
+	LegacyVersion = manifest.LegacyVersion
 
 	coverPrefix = "cover"
 )

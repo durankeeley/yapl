@@ -242,27 +242,29 @@ Components are shared layers: Proton builds, Steam runtimes, DXVK, VKD3D and umu
 * `push` packages with `zstd` by default, which compresses multi-GB games much faster than `xz`. Use `--format` to change it.
 * Push is off unless the server runs with `--allow-push`. With `--auth open` the server warns that anyone on the LAN can publish.
 
-### `pull` — download a game from a YAPL server
+### `pull` — install a game from a YAPL server
 
-On a client machine, just name the game. The server tells the client whether it's a game or app, so you never need to specify that yourself.
+Name the game, with an optional version tag like Docker. The server says whether it's a game or an app.
 
 ```bash
-# Auto-discover the server and list available packages
-./yapl pull list
-
-# Auto-discover and download + unpackage a game
-./yapl pull "Doom"
-
-# Specify a server manually (useful when auto-discovery doesn't work across subnets)
-./yapl pull --server 192.168.1.10:8471 "Doom"
-
-# With password auth
-./yapl pull --auth password --password "lanparty" "Doom"
+./yapl pull list                 # catalog: name, type, latest version, title, size
+./yapl pull "Doom"               # latest version
+./yapl pull "Doom:1.2.0"         # a specific version
+./yapl pull "Doom" --server 192.168.1.10:8471
+YAPL_PASSWORD=lanparty ./yapl pull "Doom" --auth password
 ```
+
+A pull leaves either a ready-to-play game or nothing:
+
+1. The game's manifest names the components it needs. Any missing Proton build, runtime, DXVK or VKD3D is downloaded from the server and registered in `runner.json` (entries you already have are never changed). A component the server doesn't have is fine if `runner.json` can download it on first run; otherwise the pull stops before touching anything.
+2. The archive streams through a SHA-256 check while it is extracted into `.staging/`. If the checksum doesn't match, the staging directory is deleted and nothing is installed.
+3. The verified game is moved into `games/<name>` in one step, and `games/<name>/installed.json` records the version and server for `yapl upgrade`.
+
+Pulling a game that's already installed tells you to use `yapl upgrade` instead. The server you pull from is saved in `client.json` (without the password), so later `pull`, `push` and console sessions reuse it without waiting for discovery. If it stops answering, YAPL falls back to discovery. Older YAPL servers without the v1 API still work: YAPL falls back to their legacy endpoints and says that the download can't be verified.
 
 Every download (Proton, runtime, DXVK and packages) shows progress such as `Downloading GE-Proton11-7-x86_64.tar.gz: 412.0 MB / 480.3 MB (85.8%)`. When output goes to a file or pipe, YAPL writes one line per 10% instead of redrawing the line.
 
-Auto-discovery listens for the server's UDP broadcast on port 8471 for up to 3 seconds. If discovery times out, pass `--server` to specify the address directly.
+Auto-discovery listens for the server's UDP broadcast on port 8471 for up to 3 seconds. If discovery times out, pass `--server` to give the address directly. `--password` falls back to the `YAPL_PASSWORD` environment variable.
 
 ### Package metadata and manifests
 

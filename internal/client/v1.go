@@ -2,12 +2,21 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 
+	"yapl/internal/manifest"
 	"yapl/internal/registry/api"
+)
+
+// ErrNotFound wraps every 404 and ErrUnauthorized every 401 from the
+// registry, so callers can react without parsing messages.
+var (
+	ErrNotFound     = errors.New("not found on server")
+	ErrUnauthorized = errors.New("unauthorized")
 )
 
 // errorBody is the JSON error shape the registry API returns.
@@ -54,23 +63,32 @@ func (c *Client) getJSON(path string, v any) error {
 	return nil
 }
 
+// do sends a small metadata request; it uses a short timeout so an
+// unreachable server fails fast, unlike archive transfers.
 func (c *Client) do(method, path string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequest(method, c.cfg.Server+path, body)
 	if err != nil {
 		return nil, err
 	}
 	c.applyAuth(req)
-	return c.httpClient.Do(req)
+	return c.metadataClient.Do(req)
 }
 
 // serverError turns a non-success response into an error carrying the
 // server's own explanation when it sent one.
 func serverError(resp *http.Response) error {
+	msg := fmt.Sprintf("server returned %s", resp.Status)
 	var body errorBody
 	if json.NewDecoder(resp.Body).Decode(&body) == nil && body.Error != "" {
-		return fmt.Errorf("server returned %s: %s", resp.Status, body.Error)
+		msg += ": " + body.Error
 	}
-	return fmt.Errorf("server returned %s", resp.Status)
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return fmt.Errorf("%w: %s", ErrNotFound, msg)
+	case http.StatusUnauthorized:
+		return fmt.Errorf("%w: %s (check --auth and --password)", ErrUnauthorized, msg)
+	}
+	return errors.New(msg)
 }
 
 func packagePath(name, version string) string {
@@ -79,4 +97,65 @@ func packagePath(name, version string) string {
 
 func componentPath(kind, version string) string {
 	return "/v1/components/" + url.PathEscape(kind) + "/" + url.PathEscape(version)
+}
+
+// Server is the normalised base URL this client talks to.
+func (c *Client) Server() string { return c.cfg.Server }
+
+// Catalog fetches /v1/packages.
+func (c *Client) Catalog() ([]api.CatalogEntry, error) {
+	var out []api.CatalogEntry
+	err := c.getJSON("/v1/packages", &out)
+	return out, err
+}
+
+// Manifest fetches one package version's manifest; tag may be "latest".
+func (c *Client) Manifest(name, tag string) (manifest.Manifest, error) {
+	var m manifest.Manifest
+	if err := c.getJSON(packagePath(name, tag)+"/manifest", &m); err != nil {
+		return m, fmt.Errorf("%s:%s: %w", name, tag, err)
+	}
+	return m, m.Validate()
+}
+
+// ComponentManifest fetches a component's manifest.
+func (c *Client) ComponentManifest(kind, version string) (manifest.ComponentManifest, error) {
+	var m manifest.ComponentManifest
+	if err := c.getJSON(componentPath(kind, version)+"/manifest", &m); err != nil {
+		return m, fmt.Errorf("component %s/%s: %w", kind, version, err)
+	}
+	return m, m.Validate()
+}
+
+// OpenArchive starts downloading a package archive. The caller closes it.
+func (c *Client) OpenArchive(name, version string) (io.ReadCloser, int64, error) {
+	return c.open(packagePath(name, version) + "/archive")
+}
+
+// OpenComponentArchive starts downloading a component archive.
+func (c *Client) OpenComponentArchive(kind, version string) (io.ReadCloser, int64, error) {
+	return c.open(componentPath(kind, version) + "/archive")
+}
+
+// ComponentURL is the absolute download URL of a component, recorded in
+// runner.json so the component can be fetched again later.
+func (c *Client) ComponentURL(kind, version string) string {
+	return c.cfg.Server + componentPath(kind, version) + "/archive"
+}
+
+func (c *Client) open(path string) (io.ReadCloser, int64, error) {
+	req, err := http.NewRequest(http.MethodGet, c.cfg.Server+path, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	c.applyAuth(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close()
+		return nil, 0, serverError(resp)
+	}
+	return resp.Body, resp.ContentLength, nil
 }

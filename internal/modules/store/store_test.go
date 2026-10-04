@@ -87,3 +87,47 @@ func TestPush(t *testing.T) {
 		}
 	})
 }
+
+func TestPullInstallsAndRemembersServer(t *testing.T) {
+	t.Run("given a registry with a game when pulled then it installs and later commands reuse the server", func(t *testing.T) {
+		// Given a library that published Doom to a registry
+		dir := t.TempDir()
+		orig, _ := os.Getwd()
+		os.Chdir(dir)
+		defer os.Chdir(orig)
+		os.MkdirAll(filepath.Join("source", "games", "Doom"), 0755)
+		os.WriteFile(filepath.Join("source", "games", "Doom", "game.json"), []byte(`{"proton_version":"system","launch_method":"direct","executable":"drive_c/doom.exe"}`), 0644)
+		os.WriteFile(filepath.Join("source", "runner.json"), []byte(`{"proton_versions":{}}`), 0644)
+		st := registrystore.New(t.TempDir(), io.Discard)
+		st.Refresh()
+		srv := httptest.NewServer(api.New(api.Config{Store: st, Auth: "open", AllowPush: true}))
+		defer srv.Close()
+		os.Chdir(filepath.Join(dir, "source"))
+		if code, out, errOut := execute(t, "push", "Doom", "--version", "1.0.0", "--server", srv.URL); code != kernel.ExitOK {
+			t.Fatalf("push exit %d\n%s\n%s", code, out, errOut)
+		}
+
+		// When a fresh library pulls it
+		os.MkdirAll(filepath.Join(dir, "console"), 0755)
+		os.Chdir(filepath.Join(dir, "console"))
+		code, out, errOut := execute(t, "pull", "Doom:1.0.0", "--server", srv.URL)
+
+		// Then the game is installed and the server remembered
+		if code != kernel.ExitOK {
+			t.Fatalf("pull exit %d\n%s\n%s", code, out, errOut)
+		}
+		if _, err := os.Stat(filepath.Join("games", "Doom", "game.json")); err != nil {
+			t.Fatal("game not installed")
+		}
+		saved, _ := os.ReadFile("client.json")
+		if !strings.Contains(string(saved), srv.URL) {
+			t.Fatalf("client.json = %s", saved)
+		}
+
+		// And a later list without --server uses the remembered server
+		code, out, _ = execute(t, "pull", "list")
+		if code != kernel.ExitOK || !strings.Contains(out, "Doom") || strings.Contains(out, "discovering") {
+			t.Fatalf("list exit %d:\n%s", code, out)
+		}
+	})
+}

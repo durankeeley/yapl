@@ -277,3 +277,42 @@ func TestComponentReadWrite(t *testing.T) {
 		}
 	})
 }
+
+func TestParseReference(t *testing.T) {
+	tests := []struct {
+		name, ref, wantName, wantTag string
+	}{
+		{"given a bare name then the tag is latest", "Doom", "Doom", "latest"},
+		{"given name:version then both are split", "Doom:1.2.0", "Doom", "1.2.0"},
+		{"given name:latest then the tag is latest", "Doom:latest", "Doom", "latest"},
+		{"given a name containing a colon then it is kept whole", "Need for Speed: Most Wanted", "Need for Speed: Most Wanted", "latest"},
+		{"given a name containing a colon and a tag then only the tag is split", "Need for Speed: Most Wanted:2.0.0", "Need for Speed: Most Wanted", "2.0.0"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			name, tag := ParseReference(tc.ref)
+			if name != tc.wantName || tag != tc.wantTag {
+				t.Fatalf("ParseReference(%q) = %q, %q", tc.ref, name, tag)
+			}
+		})
+	}
+}
+
+func TestInstalled(t *testing.T) {
+	t.Run("given an install record when written and read then it round trips", func(t *testing.T) {
+		dir := t.TempDir()
+		want := Installed{Name: "Doom", Type: "game", Version: "1.2.0", Server: "10.0.0.5:8471", SHA256: strings.Repeat("c", 64)}
+		if err := WriteInstalled(dir, want); err != nil {
+			t.Fatal(err)
+		}
+		got, err := ReadInstalled(dir)
+		if err != nil || got.Version != "1.2.0" || got.Server != "10.0.0.5:8471" || got.InstalledAt.IsZero() {
+			t.Fatalf("got %+v, %v", got, err)
+		}
+	})
+	t.Run("given no install record then reading reports not-exist", func(t *testing.T) {
+		if _, err := ReadInstalled(t.TempDir()); !os.IsNotExist(err) {
+			t.Fatalf("error = %v", err)
+		}
+	})
+}

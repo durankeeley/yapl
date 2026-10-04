@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -290,7 +291,7 @@ func TestInstallBundledDeps_MovesProtonToProtonDir(t *testing.T) {
 	os.WriteFile(filepath.Join(bundledProton, "proton"), []byte("#!/bin/sh"), 0755)
 
 	// When installBundledDeps is called
-	if err := installBundledDeps("games"); err != nil {
+	if err := InstallBundle("games"); err != nil {
 		t.Fatalf("installBundledDeps returned unexpected error: %v", err)
 	}
 
@@ -320,7 +321,7 @@ func TestInstallBundledDeps_SkipsAlreadyPresentDependency(t *testing.T) {
 	os.WriteFile(filepath.Join(bundledProton, "proton"), []byte("#!/bin/sh"), 0755)
 
 	// When installBundledDeps is called
-	if err := installBundledDeps("games"); err != nil {
+	if err := InstallBundle("games"); err != nil {
 		t.Fatalf("installBundledDeps returned unexpected error: %v", err)
 	}
 
@@ -340,7 +341,7 @@ func TestInstallBundledDeps_NoopWhenNoBundleDir(t *testing.T) {
 	os.MkdirAll(filepath.Join(d, "games", "Doom"), 0755)
 
 	// When installBundledDeps is called
-	err := installBundledDeps("games")
+	err := InstallBundle("games")
 
 	// Then it returns no error and makes no changes
 	if err != nil {
@@ -533,7 +534,7 @@ func TestInstallBundledDeps_MergesRunnerJSONIntoExistingFile(t *testing.T) {
 		[]byte(`{"proton_versions":{"ge8":{"url":"bundled-ge8"},"ge9":{"url":"bundled-ge9"}}}`), 0644)
 
 	// When the bundle is installed
-	if err := installBundledDeps("games"); err != nil {
+	if err := InstallBundle("games"); err != nil {
 		t.Fatalf("installBundledDeps: %v", err)
 	}
 
@@ -645,5 +646,83 @@ func TestWrite_StreamsAnExtractableArchive(t *testing.T) {
 func TestWrite_UnknownFormat(t *testing.T) {
 	if err := Write(&bytes.Buffer{}, t.TempDir(), t.TempDir(), "rar"); err == nil {
 		t.Fatal("expected an error for an unknown format")
+	}
+}
+
+func gzipTar(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+	path := makeTarGz(t, t.TempDir(), files)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func TestExtractVerified(t *testing.T) {
+	t.Run("given an archive and its checksum when extracted then files appear and verification passes", func(t *testing.T) {
+		// Given
+		data := gzipTar(t, map[string]string{"Doom/doom.wad": "wad"})
+		sum := sha256.Sum256(data)
+		dest := t.TempDir()
+
+		// When
+		err := ExtractVerified(bytes.NewReader(data), "gz", dest, hex.EncodeToString(sum[:]), int64(len(data)))
+
+		// Then
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(filepath.Join(dest, "Doom", "doom.wad")); string(got) != "wad" {
+			t.Fatalf("extracted %q", got)
+		}
+	})
+
+	t.Run("given a checksum that does not match when extracted then ErrChecksum is returned", func(t *testing.T) {
+		data := gzipTar(t, map[string]string{"Doom/doom.wad": "wad"})
+		err := ExtractVerified(bytes.NewReader(data), "gz", t.TempDir(), strings.Repeat("0", 64), int64(len(data)))
+		if !errors.Is(err, ErrChecksum) {
+			t.Fatalf("error = %v", err)
+		}
+	})
+
+	t.Run("given a size that does not match when extracted then ErrChecksum is returned", func(t *testing.T) {
+		data := gzipTar(t, map[string]string{"Doom/doom.wad": "wad"})
+		sum := sha256.Sum256(data)
+		err := ExtractVerified(bytes.NewReader(data), "gz", t.TempDir(), hex.EncodeToString(sum[:]), int64(len(data)+1))
+		if !errors.Is(err, ErrChecksum) {
+			t.Fatalf("error = %v", err)
+		}
+	})
+
+	t.Run("given no checksum when extracted then verification is skipped", func(t *testing.T) {
+		data := gzipTar(t, map[string]string{"Doom/doom.wad": "wad"})
+		if err := ExtractVerified(bytes.NewReader(data), "gz", t.TempDir(), "", -1); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("given an unknown format then it fails", func(t *testing.T) {
+		if err := ExtractVerified(strings.NewReader("x"), "rar", t.TempDir(), "", -1); err == nil {
+			t.Fatal("expected an error")
+		}
+	})
+}
+
+func TestExtract_OverwritesLongerFilesCompletely(t *testing.T) {
+	// Given a destination file longer than the archived one
+	dest := t.TempDir()
+	os.MkdirAll(filepath.Join(dest, "Doom"), 0755)
+	os.WriteFile(filepath.Join(dest, "Doom", "config.cfg"), []byte("a much longer old config"), 0644)
+	data := gzipTar(t, map[string]string{"Doom/config.cfg": "new"})
+
+	// When the archive is extracted over it
+	if err := ExtractVerified(bytes.NewReader(data), "gz", dest, "", -1); err != nil {
+		t.Fatal(err)
+	}
+
+	// Then no stale bytes remain
+	if got, _ := os.ReadFile(filepath.Join(dest, "Doom", "config.cfg")); string(got) != "new" {
+		t.Fatalf("file = %q", got)
 	}
 }

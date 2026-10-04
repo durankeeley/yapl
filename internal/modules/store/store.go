@@ -2,6 +2,7 @@
 package store
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -10,18 +11,19 @@ import (
 	"text/tabwriter"
 
 	"yapl/internal/app"
-	"yapl/internal/archive"
 	"yapl/internal/catalog"
 	"yapl/internal/client"
 	"yapl/internal/config"
 	"yapl/internal/defaults"
 	"yapl/internal/kernel"
+	"yapl/internal/manifest"
 	"yapl/internal/paths"
 	"yapl/internal/publish"
+	"yapl/internal/pull"
 )
 
 // Version is bumped whenever a store command changes behaviour.
-const Version = "1.1.0"
+const Version = "2.0.0"
 
 const bytesPerMegabyte = 1 << 20
 
@@ -39,15 +41,33 @@ func serverFlags(fs *flag.FlagSet) {
 	fs.String("server", "", "Server `address` (host:port or URL). Auto-discovered when omitted.")
 	fs.Int("port", defaults.ServerPort, "UDP `port` to listen on for discovery.")
 	fs.String("auth", defaults.AuthMode, "Auth `mode`: open or password.")
-	fs.String("password", "", "Password for password auth.")
+	fs.String("password", "", "Password for password auth (default $"+defaults.PasswordEnv+").")
 }
 
-// connect builds a client for --server, discovering one on the LAN when
-// the flag is empty.
+// connect builds a client for --server, else the server remembered in
+// client.json (when it answers), else one discovered on the LAN.
 func connect(ctx *kernel.Context) (*client.Client, error) {
+	password := ctx.String("password")
+	if password == "" {
+		password = os.Getenv(defaults.PasswordEnv)
+	}
+	auth := ctx.String("auth")
 	addr := ctx.String("server")
 	if addr == "" {
-		fmt.Fprintln(ctx.Stdout, "-> No --server specified; discovering YAPL server on LAN...")
+		saved, _ := config.LoadClientSettings(paths.ClientConfig)
+		if saved.Server != "" {
+			savedAuth := auth
+			if !ctx.IsSet("auth") && saved.Auth != "" {
+				savedAuth = saved.Auth
+			}
+			c := client.New(client.Config{Server: saved.Server, Auth: savedAuth, Password: password})
+			if reachable(c) {
+				return c, nil
+			}
+			fmt.Fprintf(ctx.Stdout, "-> Saved server %s is not answering; discovering YAPL server on LAN...\n", saved.Server)
+		} else {
+			fmt.Fprintln(ctx.Stdout, "-> No --server specified; discovering YAPL server on LAN...")
+		}
 		found, err := client.Discover(ctx.Int("port"), defaults.DiscoveryTimeout)
 		if err != nil {
 			return nil, fmt.Errorf("%w\n   Pass --server <host:port> to name the server", err)
@@ -55,7 +75,23 @@ func connect(ctx *kernel.Context) (*client.Client, error) {
 		addr = found
 		fmt.Fprintf(ctx.Stdout, "-> Found server at %s\n", addr)
 	}
-	return client.New(client.Config{Server: addr, Auth: ctx.String("auth"), Password: ctx.String("password")}), nil
+	return client.New(client.Config{Server: addr, Auth: auth, Password: password}), nil
+}
+
+// reachable reports whether a server answers at all; older servers answer
+// /v1/info with 404 or 401, which still proves they are there.
+func reachable(c *client.Client) bool {
+	_, err := c.Info()
+	return err == nil || errors.Is(err, client.ErrNotFound) || errors.Is(err, client.ErrUnauthorized)
+}
+
+// remember saves the server that just worked so later commands (and the
+// console) skip discovery. The password is never written.
+func remember(ctx *kernel.Context, c *client.Client) {
+	settings := config.ClientSettings{Server: c.Server(), Auth: ctx.String("auth")}
+	if err := config.SaveClientSettings(paths.ClientConfig, settings); err != nil {
+		fmt.Fprintf(ctx.Stderr, "warning: could not save %s: %v\n", paths.ClientConfig, err)
+	}
 }
 
 // pushFormat is zstd: a little larger than xz but many times faster to
@@ -96,6 +132,9 @@ func pushCommand() kernel.Command {
 				Format:    ctx.String("format"),
 				CreatedBy: "yapl store/" + Version,
 			}, ctx.Stdout)
+			if err == nil {
+				remember(ctx, c)
+			}
 			return err
 		},
 	}
@@ -125,30 +164,53 @@ func loadApp(name, configName string) (*app.App, error) {
 func pullCommand() kernel.Command {
 	return kernel.Command{
 		Verb:        "pull",
-		Usage:       "pull <list|name> [flags]",
-		Summary:     "List or download packages from a YAPL server",
-		Description: "Without --server, YAPL listens for a server's LAN broadcast.",
-		Examples:    []string{"yapl pull list", `yapl pull "Doom"`, `yapl pull --server 192.168.1.10:8471 "Doom"`},
-		Flags: func(fs *flag.FlagSet) {
-			serverFlags(fs)
-			fs.String("output-dir", "", "Keep the downloaded archive in this `path` (default: a temporary directory).")
+		Usage:       "pull <list|name[:version]> [flags]",
+		Summary:     "List or install packages from a YAPL server",
+		Description: "Installs name (latest version) or name:version. The archive and every component it needs (Proton, runtime, DXVK, …) are downloaded, checked against their SHA-256 and moved into place only when complete. The server is remembered in client.json; without --server YAPL uses that, or listens for a server's LAN broadcast.",
+		Examples: []string{
+			"yapl pull list",
+			`yapl pull "Doom"`,
+			`yapl pull "Doom:1.2.0"`,
+			`yapl pull "Doom" --server 192.168.1.10:8471`,
 		},
+		Flags: serverFlags,
 		Run: func(ctx *kernel.Context) error {
 			c, err := connect(ctx)
 			if err != nil {
 				return err
 			}
-
-			name := ctx.Arg(0)
-			if name == "" || name == "list" {
-				return printCatalog(ctx, c)
+			ref := ctx.Arg(0)
+			if ref == "" || ref == "list" {
+				err = printCatalog(ctx, c)
+			} else {
+				name, tag := manifest.ParseReference(ref)
+				_, err = pull.Pull(c, name, tag, pull.Options{Out: ctx.Stdout})
 			}
-			return pull(ctx, c, name)
+			if err == nil {
+				remember(ctx, c)
+			}
+			return err
 		},
 	}
 }
 
 func printCatalog(ctx *kernel.Context, c *client.Client) error {
+	catalog, err := c.Catalog()
+	if errors.Is(err, client.ErrNotFound) {
+		return printLegacyCatalog(ctx, c)
+	}
+	if err != nil {
+		return fmt.Errorf("list packages: %w", err)
+	}
+	tw := tabwriter.NewWriter(ctx.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "NAME\tTYPE\tLATEST\tVERSIONS\tSIZE\tTITLE")
+	for _, e := range catalog {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d MB\t%s\n", e.Name, e.Type, e.Latest, len(e.Versions), e.SizeBytes/bytesPerMegabyte, e.Title)
+	}
+	return tw.Flush()
+}
+
+func printLegacyCatalog(ctx *kernel.Context, c *client.Client) error {
 	entries, err := c.List()
 	if err != nil {
 		return fmt.Errorf("list packages: %w", err)
@@ -159,27 +221,4 @@ func printCatalog(ctx *kernel.Context, c *client.Client) error {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d MB\n", e.Name, e.Type, e.Format, e.SizeBytes/bytesPerMegabyte)
 	}
 	return tw.Flush()
-}
-
-func pull(ctx *kernel.Context, c *client.Client, name string) error {
-	dlDir := ctx.String("output-dir")
-	if dlDir == "" {
-		tmp, err := os.MkdirTemp("", "yapl-pull-*")
-		if err != nil {
-			return fmt.Errorf("create temp dir: %w", err)
-		}
-		defer os.RemoveAll(tmp)
-		dlDir = tmp
-	}
-	archivePath, entryType, err := c.Download(name, dlDir, ctx.Stderr)
-	if err != nil {
-		return fmt.Errorf("download failed: %w", err)
-	}
-	fmt.Fprintf(ctx.Stdout, "-> Downloaded to %s\n", archivePath)
-
-	targetDir := paths.TypeDir(entryType)
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		return fmt.Errorf("create %s: %w", targetDir, err)
-	}
-	return archive.Unpackage(targetDir, []string{archivePath})
 }

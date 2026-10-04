@@ -226,26 +226,26 @@ yapl serve --packages-dir /srv/games --auth password --password lanparty --allow
 
 ## `yapl pull`
 
-List or download packages from a YAPL server
+List or install packages from a YAPL server
 
 ```
-yapl pull <list|name> [flags]
+yapl pull <list|name[:version]> [flags]
 ```
 
-Without --server, YAPL listens for a server's LAN broadcast.
+Installs name (latest version) or name:version. The archive and every component it needs (Proton, runtime, DXVK, …) are downloaded, checked against their SHA-256 and moved into place only when complete. The server is remembered in client.json; without --server YAPL uses that, or listens for a server's LAN broadcast.
 
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--auth <mode>` | Auth mode: open or password. | `open` |
-| `--output-dir <path>` | Keep the downloaded archive in this path (default: a temporary directory). |  |
-| `--password <string>` | Password for password auth. |  |
+| `--password <string>` | Password for password auth (default $YAPL_PASSWORD). |  |
 | `--port <port>` | UDP port to listen on for discovery. | `8471` |
 | `--server <address>` | Server address (host:port or URL). Auto-discovered when omitted. |  |
 
 ```bash
 yapl pull list
 yapl pull "Doom"
-yapl pull --server 192.168.1.10:8471 "Doom"
+yapl pull "Doom:1.2.0"
+yapl pull "Doom" --server 192.168.1.10:8471
 ```
 
 ## `yapl push`
@@ -263,7 +263,7 @@ Packages the game, uploads every component (Proton, runtime, DXVK, VKD3D, umu-la
 | `--auth <mode>` | Auth mode: open or password. | `open` |
 | `--config <file>` | Config file name inside the game directory (default game.json or app.json). |  |
 | `--format <format>` | Compression format for the package: gz, xz, zst. | `zst` |
-| `--password <string>` | Password for password auth. |  |
+| `--password <string>` | Password for password auth (default $YAPL_PASSWORD). |  |
 | `--port <port>` | UDP port to listen on for discovery. | `8471` |
 | `--server <address>` | Server address (host:port or URL). Auto-discovered when omitted. |  |
 | `--version <version>` | Package version (MAJOR.MINOR.PATCH); defaults to metadata.json's. |  |

@@ -29,10 +29,15 @@ type Config struct {
 	Password string
 }
 
+// metadataTimeout bounds catalog, manifest and info requests. Archive
+// transfers have no overall timeout: multi-GB games take as long as they take.
+const metadataTimeout = 10 * time.Second
+
 // Client communicates with a YAPL package server.
 type Client struct {
-	cfg        Config
-	httpClient *http.Client
+	cfg            Config
+	httpClient     *http.Client
+	metadataClient *http.Client
 }
 
 // New creates a Client.
@@ -42,7 +47,7 @@ func New(cfg Config) *Client {
 		baseURL = "http://" + baseURL
 	}
 	cfg.Server = strings.TrimRight(baseURL, "/")
-	return &Client{cfg: cfg, httpClient: &http.Client{}}
+	return &Client{cfg: cfg, httpClient: &http.Client{}, metadataClient: &http.Client{Timeout: metadataTimeout}}
 }
 
 // List fetches the package manifest from the server.

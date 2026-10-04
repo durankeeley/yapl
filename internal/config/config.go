@@ -330,3 +330,25 @@ func (g *Global) Register(kind, version string, v VersionInfo) {
 		g.DependencyVersions[kind][version] = v
 	}
 }
+
+// ClientSettings remembers which registry this machine pulls from. The
+// password is deliberately not stored.
+type ClientSettings struct {
+	Server string `json:"server,omitempty"`
+	Auth   string `json:"auth,omitempty"`
+}
+
+// LoadClientSettings reads client.json; a missing file gives empty settings.
+func LoadClientSettings(path string) (ClientSettings, error) {
+	var s ClientSettings
+	err := readJSONFile(path, &s)
+	if os.IsNotExist(err) {
+		return ClientSettings{}, nil
+	}
+	return s, err
+}
+
+// SaveClientSettings writes client.json.
+func SaveClientSettings(path string, s ClientSettings) error {
+	return writeJSONFile(path, s)
+}

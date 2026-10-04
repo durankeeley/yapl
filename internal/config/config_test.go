@@ -640,3 +640,26 @@ func TestRegister(t *testing.T) {
 		}
 	})
 }
+
+func TestClientSettings(t *testing.T) {
+	t.Run("given saved client settings when loaded then the server and auth mode come back", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "client.json")
+		if err := SaveClientSettings(path, ClientSettings{Server: "10.0.0.5:8471", Auth: "password"}); err != nil {
+			t.Fatal(err)
+		}
+		got, err := LoadClientSettings(path)
+		if err != nil || got.Server != "10.0.0.5:8471" || got.Auth != "password" {
+			t.Fatalf("got %+v, %v", got, err)
+		}
+		data, _ := os.ReadFile(path)
+		if strings.Contains(string(data), "password\":") && strings.Contains(string(data), "secret") {
+			t.Fatal("password written to disk")
+		}
+	})
+	t.Run("given no client settings file then empty settings are returned without error", func(t *testing.T) {
+		got, err := LoadClientSettings(filepath.Join(t.TempDir(), "missing.json"))
+		if err != nil || got.Server != "" {
+			t.Fatalf("got %+v, %v", got, err)
+		}
+	})
+}

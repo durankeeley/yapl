@@ -253,15 +253,15 @@ Here's what happens when you type `./yapl run "Doom"`:
 
 ## How a typical `pull` flows through the code
 
-Here's what happens when you type `./yapl pull --server 192.168.1.10:8471 "Doom" game`:
+Here's what happens when you type `./yapl pull "Doom:1.2.0"`:
 
-1. **`kernel` → `store` module** — Parses the `pull` command and creates a `client.Client` with the server address and auth config.
+1. **`store` module** — `connect` picks `--server`, else the server saved in `client.json` (if it answers), else UDP discovery. `manifest.ParseReference` splits `Doom:1.2.0`.
+2. **`pull.Pull`** — `/v1/info` checks the API version (a 404 or 401 means an older server, so the legacy path `pullLegacy` is used). It fetches the manifest, refuses if `games/Doom` exists (`ErrAlreadyInstalled`), then:
+3. **`pull.EnsureComponents`** — for each manifest component missing locally, fetches the component manifest, streams the archive through `archive.ExtractVerified` into `.staging/component-*`, renames it to `proton/<v>` or `dependencies/<kind>/<v>`, and registers it in `runner.json` with the server's download URL. Local entries always win.
+4. **`pull.Fetch`** — streams the package through `ExtractVerified` (SHA-256 and size checked after the tar's trailing padding is drained) into `.staging/package-*`, installs any `_bundle/`, and returns the `<name>/` directory.
+5. The staged directory is renamed to `games/Doom`, `installed.json` is written, and the module saves `client.json`.
 
-2. **`client.List()`** — Fetches `GET /packages` to discover the filename extension for the `Doom` package.
-
-3. **`client.Download()`** — Fetches `GET /packages/Doom`, writes the response to a temp file while reporting progress to stderr. Cleans up the temp file if the download fails.
-
-4. **`archive.Unpackage()`** — Extracts the downloaded archive into `games/`.
+`EnsureComponents`, `Fetch` and `RecordInstall` are exported because `upgrade` (PRD-45) and the console reuse them.
 
 ---
 
