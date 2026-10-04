@@ -45,6 +45,8 @@
 * Uninstall requires `?confirm=<name>` to guard against accidental deletion.
 * Cover fallbacks: no cover → 404, UI renders a generated tile.
 * Bound to loopback only; the store's server password comes from `--password` or `YAPL_PASSWORD`, held in memory.
+* **Browser safety:** any web page can make a browser send requests to `127.0.0.1`. Every request must carry a loopback `Host` (`127.0.0.1`, `localhost`, `[::1]`), which blocks DNS rebinding, and every mutating request (POST/DELETE) must carry the `X-Yapl-Console: 1` header. Cross-origin pages cannot add that header without a CORS preflight, which the service never approves.
+* **Jobs run one at a time** in a single worker (queued jobs report `queued`), because two pulls writing `runner.json` concurrently would race.
 
 ## 4. Execution & Milestones
 
