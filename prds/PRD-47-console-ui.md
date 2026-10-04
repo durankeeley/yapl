@@ -1,6 +1,6 @@
 # PRD-47 - `yapl console`: Gamepad-First Full-Screen Launcher
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** High
 **Size:** L
 **Sprint:** Phase 3 — Console client
@@ -43,7 +43,11 @@
 
 ### Browser launch (`internal/console/browser.go`)
 * Candidates in order: `chromium`, `chromium-browser`, `google-chrome`, `brave-browser` (`--kiosk --app=<url>`), `firefox` (`--kiosk <url>`), then `xdg-open <url>`.
-* Flags: `--no-browser`, `--port`, `--windowed` (app mode without kiosk).
+* Flags: `--no-browser`, `--port`, `--windowed` (app mode without kiosk), plus `--server`/`--auth`/`--password` like `pull`.
+* The browser gets its own profile in `<library>/.console-browser`, so kiosk mode works even when the user's browser is already open and the console never touches their normal profile.
+* When YAPL started the browser itself in kiosk mode, closing that window shuts the console down: closing the console screen ends everything.
+* Server selection: `--server`, else `client.json` (if it answers), else LAN discovery; with none found the console starts offline (library only) and says so on the System tab.
+* `yapl console` lives in its own versioned module (`internal/modules/console`).
 
 ## 4. Execution & Milestones
 
