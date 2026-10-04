@@ -70,6 +70,30 @@ yapl console --windowed
 yapl console --no-browser --port 9000
 ```
 
+## `yapl export`
+
+Add games to the app menu or Steam, or start the console on login
+
+```
+yapl export <desktop|steam|autostart> [name] [flags]
+```
+
+desktop writes a menu entry per installed game (and one for the console) to $XDG_DATA_HOME/applications. steam adds non-Steam shortcuts with cover art for every Steam user, so Big Picture and the Steam Deck can launch them; Steam must be closed. autostart starts 'yapl console' when you log in. Entries run this yapl binary with --workdir pointing at this library.
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--force` | Export to Steam even while it is running (Steam may overwrite the change when it exits). |  |
+| `--output-dir <path>` | Write desktop or autostart entries to this path instead of the XDG default. |  |
+| `--steam-root <path>` | Steam installation path (default ~/.local/share/Steam or ~/.steam/steam). |  |
+| `--steam-user <id>` | Only export to this Steam user id. |  |
+
+```bash
+yapl export desktop
+yapl export desktop "Doom"
+yapl export steam
+yapl export autostart
+```
+
 ## `yapl setup`
 
 Create a prefix and download dependencies

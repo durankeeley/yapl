@@ -8,6 +8,7 @@ import (
 	"yapl/internal/catalog"
 	"yapl/internal/kernel"
 	"yapl/internal/modules/console"
+	"yapl/internal/modules/integration"
 	"yapl/internal/modules/lifecycle"
 	"yapl/internal/modules/registry"
 	"yapl/internal/modules/store"
@@ -18,6 +19,7 @@ func modules() []kernel.Module {
 	return []kernel.Module{
 		catalog.Module{},
 		console.Module{},
+		integration.Module{},
 		lifecycle.Module{},
 		registry.Module{},
 		store.Module{},

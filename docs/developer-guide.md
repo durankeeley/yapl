@@ -163,8 +163,8 @@ All the interesting code lives under `internal/`. Here's what each package does:
 cmd/yapl/main.go ── registers ──► internal/kernel ◄── Module{Name, Version, Commands}
                                         │
               ┌─────────────────────────┼──────────────────────────┐
-   internal/modules/lifecycle   internal/modules/registry   internal/modules/store   internal/modules/console
-   setup install run package    serve                       pull push upgrade        console
+   internal/modules/lifecycle   internal/modules/registry   internal/modules/store   internal/modules/console   internal/modules/integration
+   setup install run package    serve                       pull push upgrade        console                    export
    unpackage info list clean
 ```
 
@@ -307,6 +307,12 @@ Plain HTML, CSS and ES modules embedded with `//go:embed` (`internal/console/ui.
 * **`internal/console/browser.go`** picks the browser and builds its arguments (tested with a fake `PATH`). **`internal/modules/console`** wires it together: resolve the server with `internal/connect`, build the service with the embedded UI, listen on `127.0.0.1`, open the browser, and quit on Ctrl+C or when the kiosk window closes.
 
 To look at the UI without a controller, run `yapl console --windowed` and use the keyboard.
+
+## Integrations (`internal/integration`, `internal/modules/integration`)
+
+* **`desktop`**: `Render` writes a Desktop Entry with values forced onto one line (no key injection through a game title). `ExecLine` follows the spec's quoting: reserved characters mean a double-quoted argument with `"`, `` ` ``, `$` and `\` escaped, and `%` is doubled.
+* **`steam`**: `vdf.go` is a binary VDF codec. Numeric values keep their raw bytes, so `Parse` → `Encode` is byte-exact even for types YAPL ignores. `Upsert` matches YAPL shortcuts by `Exe` + `LaunchOptions` and never touches other entries. `AppID` is `crc32(Exe + AppName) | 0x80000000`, the ID Steam uses for grid art (`config/grid/<appid>p.<ext>`). `Export` refuses to overwrite a file it can't parse and writes through a temp file and rename. `Running` scans `/proc/*/comm`.
+* The `export` command builds entries from `console.ListLibrary`, pointing them at `os.Executable()` with `--workdir` set to the current library.
 
 ## How to add a new command
 

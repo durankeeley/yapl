@@ -127,6 +127,21 @@ Point it at a library from anywhere, for example from an autostart entry:
 yapl --workdir /opt/lan-games console
 ```
 
+## Integrations — app menu, Steam and boot-to-console
+
+```bash
+./yapl export desktop          # menu entries for every installed game, plus "YAPL Console"
+./yapl export desktop "Doom"   # just one game
+./yapl export steam            # non-Steam shortcuts with cover art (close Steam first)
+./yapl export autostart        # start the console when you log in
+```
+
+* **desktop** writes `yapl-<game>.desktop` files to `~/.local/share/applications` (or `$XDG_DATA_HOME`, or `--output-dir`). The game's cover is the icon. Games that aren't installed yet are skipped.
+* **steam** adds a shortcut per game for every Steam user (limit it with `--steam-user <id>`), with the cover as Big Picture library art, so the Steam Deck and Big Picture can launch YAPL games directly. Your other non-Steam shortcuts are kept byte for byte, and exporting again updates the existing entries instead of duplicating them. Steam rewrites this file when it exits, so YAPL refuses while Steam is running unless you pass `--force`. Use `--steam-root` for unusual installs.
+* **autostart** writes `~/.config/autostart/yapl-console.desktop`. Together with automatic login, a LAN machine boots straight into the console like a games console.
+
+Every entry runs this `yapl` binary with `--workdir` set to the library you exported from, so it works however the desktop launches it.
+
 ## Command Reference
 
 | Command                        | Description                                                                      |
@@ -145,6 +160,7 @@ yapl --workdir /opt/lan-games console
 | `push <name>`                  | Publishes a game and any components the server lacks.                            |
 | `upgrade [name\|self\|catalog]` | Upgrades only the parts whose version changed.                                   |
 | `console`                      | Opens the full-screen, gamepad-driven launcher.                                  |
+| `export desktop\|steam\|autostart` | Adds games to the app menu or Steam, or starts the console on login.        |
 | `version`                      | Shows the version of the kernel and each module.                                 |
 | `help [command]`               | Shows all commands, or one command's flags and examples.                         |
 

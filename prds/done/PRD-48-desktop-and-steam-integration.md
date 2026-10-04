@@ -1,6 +1,6 @@
 # PRD-48 - Desktop, Steam and Autostart Integration (`yapl export`)
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** Medium
 **Size:** M
 **Sprint:** Phase 3 — Console client
@@ -43,10 +43,10 @@ yapl export autostart          # start `yapl console` on login
 
 ## 4. Execution & Milestones
 
-- [ ] VDF round-trip tests (byte-exact on a fixture), merge tests.
-- [ ] Desktop file content tests (quoting of names with spaces).
-- [ ] App ID test against a known Steam value.
-- [ ] README "Integrations" section.
+- [x] VDF round-trip tests (byte-exact on a fixture), merge tests.
+- [x] Desktop file content tests (quoting of names with spaces).
+- [x] App ID test against the documented formula (crc32 of Exe+AppName with the high bit set).
+- [x] README "Integrations" section.
 
 ### Acceptance scenarios
 * **Given** an existing `shortcuts.vdf` with one user shortcut **when** I export two games **then** the file has three shortcuts and the user's is byte-identical.

@@ -36,12 +36,12 @@ Phases supersede the sprint ordering below for anything they list. Within a phas
 | PRD-44 | Pull v2: tags, verified streaming install, components, remembered server | L | ✅ Done |
 | PRD-45 | `yapl upgrade`: per-part upgrades (games keep saves, self, catalog) | L | ✅ Done |
 
-### Phase 3 — Console client
-| PRD | Title | Size |
-|-----|-------|------|
-| PRD-46 | Console service: local API for library, store, jobs, sessions | L |
-| PRD-47 | `yapl console`: gamepad-first full-screen launcher | L |
-| PRD-48 | `yapl export`: desktop, Steam and autostart integration | M |
+### Phase 3 — Console client ✅ Complete
+| PRD | Title | Size | Status |
+|-----|-------|------|--------|
+| PRD-46 | Console service: local API for library, store, jobs, sessions | L | ✅ Done |
+| PRD-47 | `yapl console`: gamepad-first full-screen launcher | L | ✅ Done |
+| PRD-48 | `yapl export`: desktop, Steam and autostart integration | M | ✅ Done |
 
 ### Backlog (not in a phase)
 PRD-11 (dependency upgrade flags, partly superseded by PRD-45), PRD-12 (`--no-prefix`), PRD-23/25/30 (wine builder ecosystem), PRD-35 (display resolution).
