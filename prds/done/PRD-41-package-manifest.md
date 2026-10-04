@@ -1,6 +1,6 @@
 # PRD-41 - Package Manifest: Metadata, Versions, Checksums, Components
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** M
 **Sprint:** Phase 2 — Registry server
@@ -53,10 +53,10 @@ type Manifest struct {
 
 ## 4. Execution & Milestones
 
-- [ ] `manifest` package and tests (round trip, validation table, components table).
-- [ ] Hash-while-writing in `archive`; returns archive facts.
-- [ ] `package` writes sidecars; `--version`, `--output-dir`, `--fetch-cover`.
-- [ ] README "Package metadata" section.
+- [x] `manifest` package and tests (round trip, validation table, components table).
+- [x] Hash-while-writing in `archive`; returns archive facts.
+- [x] `package` writes sidecars; `--version`, `--output-dir`, `--fetch-cover`.
+- [x] README "Package metadata" section.
 
 ### Acceptance scenarios
 * **Given** a game without `metadata.json` **when** I package it **then** `metadata.json` is created with title = name, version `1.0.0`, and `<Name>.manifest.json` lists the archive SHA-256 that matches `sha256sum <Name>.tar.xz`.

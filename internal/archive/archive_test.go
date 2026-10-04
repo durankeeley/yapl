@@ -3,6 +3,8 @@ package archive
 import (
 	"archive/tar"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -171,7 +173,7 @@ func TestPackageAndUnpackage_RoundTrip(t *testing.T) {
 	defer os.Chdir(orig)
 
 	// When Package is called
-	if err := Package("mygame", "gz"); err != nil {
+	if _, err := Package("mygame", ".", "gz"); err != nil {
 		t.Fatalf("Package returned an unexpected error: %v", err)
 	}
 	archivePath := filepath.Join(src, "mygame.tar.gz")
@@ -249,7 +251,7 @@ func TestPackageFromDir_ArchiveContainsAllStagedItems(t *testing.T) {
 	defer os.Chdir(orig)
 
 	// When PackageFromDir is called
-	if err := PackageFromDir(staging, "Doom", "gz"); err != nil {
+	if _, err := PackageFromDir(staging, "Doom", ".", "gz"); err != nil {
 		t.Fatalf("PackageFromDir returned unexpected error: %v", err)
 	}
 
@@ -572,5 +574,41 @@ func TestExtract_HTTPDownloadReportsProgress(t *testing.T) {
 	last := updates[len(updates)-1]
 	if !last.Complete || last.Total != int64(len(data)) || last.Label != "dxvk.tar.gz" {
 		t.Fatalf("last update = %+v", last)
+	}
+}
+
+func TestPackage_ReportsChecksumAndWritesToOutputDir(t *testing.T) {
+	// Given a game directory and a separate output directory
+	src := t.TempDir()
+	os.MkdirAll(filepath.Join(src, "Doom"), 0755)
+	os.WriteFile(filepath.Join(src, "Doom", "doom.exe"), []byte("binary"), 0755)
+	out := filepath.Join(t.TempDir(), "dist")
+
+	// When the game is packaged
+	res, err := Package(filepath.Join(src, "Doom"), out, "zst")
+
+	// Then the archive is in the output dir and the reported facts match the file
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(out, "Doom.tar.zst"))
+	if err != nil {
+		t.Fatalf("archive not in output dir: %v", err)
+	}
+	sum := sha256.Sum256(data)
+	if res.Path != filepath.Join(out, "Doom.tar.zst") || res.Format != "zst" || res.SizeBytes != int64(len(data)) || res.SHA256 != hex.EncodeToString(sum[:]) {
+		t.Fatalf("result = %+v, want sha %x size %d", res, sum, len(data))
+	}
+}
+
+func TestPackage_UnknownFormatWritesNothing(t *testing.T) {
+	src := t.TempDir()
+	os.MkdirAll(filepath.Join(src, "Doom"), 0755)
+	out := t.TempDir()
+	if _, err := Package(filepath.Join(src, "Doom"), out, "rar"); err == nil {
+		t.Fatal("expected an error for an unknown format")
+	}
+	if entries, _ := os.ReadDir(out); len(entries) != 0 {
+		t.Fatalf("output dir not empty: %v", entries)
 	}
 }

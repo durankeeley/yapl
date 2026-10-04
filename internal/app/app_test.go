@@ -544,7 +544,7 @@ func TestPackage_ErrorWhenGameDirMissing(t *testing.T) {
 	}
 
 	// When Package is called
-	err := a.Package("gz", false, true)
+	_, err := a.Package(PackageOptions{Format: "gz", Yes: true})
 
 	// Then it returns an error
 	if err == nil {
@@ -577,7 +577,7 @@ func TestPackage_CreatesArchiveFile(t *testing.T) {
 	}
 
 	// When Package is called without bundling deps
-	err := a.Package("gz", false, true)
+	_, err := a.Package(PackageOptions{Format: "gz", Yes: true})
 
 	// Then no error is returned
 	if err != nil {
@@ -626,7 +626,7 @@ func TestPackage_PreservesSymlinksInGameDirectory(t *testing.T) {
 	}
 
 	// When Package is called with bundleDeps=true (exercises fs.CopyDir)
-	err := a.Package("gz", true, true)
+	_, err := a.Package(PackageOptions{Format: "gz", BundleDeps: true, Yes: true})
 
 	// Then no error is returned (CopyDir handles the symlink correctly without recursing into it)
 	if err != nil {

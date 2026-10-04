@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"yapl/internal/archive"
 	"yapl/internal/command"
 	"yapl/internal/config"
 	"yapl/internal/defaults"
@@ -202,121 +201,6 @@ func statusMark(present bool) string {
 		return "✓ present"
 	}
 	return "✗ missing"
-}
-
-// Package creates a compressed tarball of the application directory.
-// When bundleDeps is true, Proton and configured dependencies are staged into a _bundle/
-// directory inside the archive for true offline portability.
-func (a *App) Package(format string, bundleDeps, yes bool) error {
-	if err := config.ValidateApp(a.AppConfig); err != nil {
-		return err
-	}
-	fmt.Println("📦 Starting packaging process...")
-
-	if !bundleDeps {
-		return archive.Package(a.AppDir, format)
-	}
-
-	// Estimate the total bundle size before committing.
-	totalBytes, err := bundleSize(a)
-	if err != nil {
-		return fmt.Errorf("could not estimate bundle size: %w", err)
-	}
-	sizeGB := float64(totalBytes) / float64(1<<30)
-
-	if !yes {
-		fmt.Printf("Warning: bundled package will be approximately %.1f GB. Continue? [y/N]: ", sizeGB)
-		var resp string
-		fmt.Scanln(&resp)
-		if resp != "y" && resp != "Y" {
-			return fmt.Errorf("packaging cancelled")
-		}
-	} else {
-		fmt.Printf("-> Bundling approximately %.1f GB of dependencies...\n", sizeGB)
-	}
-
-	stagingDir, err := os.MkdirTemp("", "yapl-bundle-*")
-	if err != nil {
-		return fmt.Errorf("create staging dir: %w", err)
-	}
-	defer os.RemoveAll(stagingDir)
-
-	// Copy game dir into staging as <name>/
-	if err := fs.CopyDir(a.AppDir, filepath.Join(stagingDir, a.Name)); err != nil {
-		return fmt.Errorf("copy game dir to staging: %w", err)
-	}
-
-	// Copy Proton.
-	protonSrc := paths.Proton(a.AppConfig.ProtonVersion)
-	if !fs.DirExistsAndIsNotEmpty(protonSrc) {
-		return fmt.Errorf("proton '%s' not downloaded; run 'setup' before bundling", a.AppConfig.ProtonVersion)
-	}
-	protonDst := filepath.Join(stagingDir, paths.BundleDir, protonSrc)
-	if err := fs.CopyDir(protonSrc, protonDst); err != nil {
-		return fmt.Errorf("copy proton to bundle: %w", err)
-	}
-
-	// Copy DXVK if configured.
-	if v := a.AppConfig.Dependencies.DXVKVersion; v != "" {
-		src := paths.Dependency(paths.KindDXVK, v)
-		if fs.DirExistsAndIsNotEmpty(src) {
-			if err := fs.CopyDir(src, filepath.Join(stagingDir, paths.BundleDir, src)); err != nil {
-				return fmt.Errorf("copy dxvk to bundle: %w", err)
-			}
-		}
-	}
-
-	// Copy VKD3D if configured.
-	if v := a.AppConfig.Dependencies.VKD3DVersion; v != "" {
-		src := paths.Dependency(paths.KindVKD3D, v)
-		if fs.DirExistsAndIsNotEmpty(src) {
-			if err := fs.CopyDir(src, filepath.Join(stagingDir, paths.BundleDir, src)); err != nil {
-				return fmt.Errorf("copy vkd3d to bundle: %w", err)
-			}
-		}
-	}
-
-	// Copy runtime if configured.
-	if v := a.AppConfig.RuntimeVersion; v != "" {
-		src := paths.Runtime(v)
-		if fs.DirExistsAndIsNotEmpty(src) {
-			if err := fs.CopyDir(src, filepath.Join(stagingDir, paths.BundleDir, src)); err != nil {
-				return fmt.Errorf("copy runtime to bundle: %w", err)
-			}
-		}
-	}
-
-	// Copy runner.json so the target machine knows which versions to reference.
-	if _, err := os.Stat(paths.RunnerConfig); err == nil {
-		if err := fs.CopyFile(paths.RunnerConfig, filepath.Join(stagingDir, paths.BundleDir, paths.RunnerConfig)); err != nil {
-			return fmt.Errorf("copy runner.json to bundle: %w", err)
-		}
-	}
-
-	return archive.PackageFromDir(stagingDir, a.Name, format)
-}
-
-func bundleSize(a *App) (int64, error) {
-	var total int64
-	dirs := []string{a.AppDir, paths.Proton(a.AppConfig.ProtonVersion)}
-	if v := a.AppConfig.Dependencies.DXVKVersion; v != "" {
-		dirs = append(dirs, paths.Dependency(paths.KindDXVK, v))
-	}
-	if v := a.AppConfig.Dependencies.VKD3DVersion; v != "" {
-		dirs = append(dirs, paths.Dependency(paths.KindVKD3D, v))
-	}
-	if v := a.AppConfig.RuntimeVersion; v != "" {
-		dirs = append(dirs, paths.Runtime(v))
-	}
-	for _, p := range dirs {
-		_ = filepath.Walk(p, func(_ string, info os.FileInfo, err error) error {
-			if err == nil && !info.IsDir() {
-				total += info.Size()
-			}
-			return nil
-		})
-	}
-	return total, nil
 }
 
 // CleanTargets specifies which YAPL-managed directories to remove for a game or app.

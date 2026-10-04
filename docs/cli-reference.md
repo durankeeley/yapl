@@ -116,21 +116,27 @@ yapl run "HalfLife" --config cstrike.json --debug
 
 ## `yapl package`
 
-Create a distributable archive
+Create a distributable archive with a manifest
 
 ```
 yapl package <name> [flags]
 ```
 
+Writes <name>.tar.<format>, plus <name>.manifest.json (title, version, SHA-256, required components) and the cover art when the game has one. metadata.json is created in the game directory if missing.
+
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--bundle-deps` | Bundle Proton and dependencies into the archive for offline machines. |  |
 | `--config <file>` | Config file name inside the game directory (default game.json or app.json). |  |
+| `--fetch-cover` | Download cover art from Steam when steam_app_id is set and the game has no cover. |  |
 | `--format <format>` | Compression format: gz, xz, zst. | `xz` |
+| `--output-dir <path>` | Directory path to write the archive and its sidecar files to. | `.` |
+| `--version <version>` | Package version (MAJOR.MINOR.PATCH); saved to metadata.json. |  |
 | `--yes` | Skip confirmation prompts. |  |
 
 ```bash
 yapl package "Doom"
+yapl package "Doom" --version 1.2.0 --output-dir ./dist
 yapl package "Doom" --format zst --bundle-deps --yes
 ```
 

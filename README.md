@@ -215,6 +215,36 @@ Every download (Proton, runtime, DXVK and packages) shows progress such as `Down
 
 Auto-discovery listens for the server's UDP broadcast on port 8471 for up to 3 seconds. If discovery times out, pass `--server` to specify the address directly.
 
+### Package metadata and manifests
+
+Every game directory can carry a `metadata.json`. It shows up in the LAN server's catalog and the console, and it drives upgrades. `package` creates it on first use with the title set to the game's name and version `1.0.0`:
+
+```json
+{
+  "title": "Half-Life",
+  "version": "1.1.0",
+  "description": "Gordon Freeman's first day at Black Mesa.",
+  "tags": ["fps", "classic"],
+  "players": "1-32",
+  "cover": "cover.jpg",
+  "preserve": ["cstrike/config.cfg", "valve/save/*"]
+}
+```
+
+* `version` must be `MAJOR.MINOR.PATCH`. Set it while packaging with `--version 1.2.0`.
+* `cover` defaults to `cover.jpg`, `cover.png` or `cover.webp` in the game directory. `--fetch-cover` downloads Steam's library art when `steam_app_id` is set and there's no cover yet.
+* `preserve` lists files, relative to the game directory, that upgrades must keep (saves and configs stored next to the game).
+
+`package` writes three files to `--output-dir` (default: the current directory):
+
+```
+Doom.tar.xz            the archive
+Doom.manifest.json     name, type, metadata, archive SHA-256 and size, required components
+Doom.cover.jpg         the cover art, when the game has one
+```
+
+The manifest's `components` list names the Proton build, runtime, DXVK, VKD3D and umu-launcher versions the game needs, so a server or client can provide them separately from the game.
+
 ### `package --bundle-deps` — offline / LAN portability
 
 Bundle Proton and all configured dependencies inside the archive so the target machine needs no internet access:

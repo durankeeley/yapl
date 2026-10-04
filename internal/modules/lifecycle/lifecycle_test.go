@@ -244,3 +244,34 @@ func TestInstall(t *testing.T) {
 		})
 	}
 }
+
+func TestPackageCommand(t *testing.T) {
+	t.Run("given a version and output dir when package runs then the archive and manifest land in the output dir", func(t *testing.T) {
+		// Given
+		inLibrary(t)
+		writeGame(t, "Doom", validGame)
+
+		// When
+		code, _, errOut := execute(t, "package", "Doom", "--version", "1.4.0", "--output-dir", "dist", "--format", "gz")
+
+		// Then
+		if code != kernel.ExitOK {
+			t.Fatalf("exit %d\n%s", code, errOut)
+		}
+		data, err := os.ReadFile(filepath.Join("dist", "Doom.manifest.json"))
+		if err != nil || !strings.Contains(string(data), `"version": "1.4.0"`) || !strings.Contains(string(data), "yapl lifecycle/"+Version) {
+			t.Fatalf("manifest = %s, %v", data, err)
+		}
+		if _, err := os.Stat(filepath.Join("dist", "Doom.tar.gz")); err != nil {
+			t.Fatal("archive missing from output dir")
+		}
+	})
+
+	t.Run("given an invalid version when package runs then it fails", func(t *testing.T) {
+		inLibrary(t)
+		writeGame(t, "Doom", validGame)
+		if code, _, errOut := execute(t, "package", "Doom", "--version", "v-next"); code != kernel.ExitError || !strings.Contains(errOut, "invalid package version") {
+			t.Fatalf("exit %d\n%s", code, errOut)
+		}
+	})
+}

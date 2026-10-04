@@ -197,6 +197,9 @@ The most complex file. Contains:
 ### `internal/archive/archive.go`
 Handles all archive operations: download a `.tar.xz` from the internet and extract it, or create a `.tar.gz` from a directory. Supports `gz`, `xz`, and `zst` compression.
 
+### `internal/manifest/`
+Describes a package: `Metadata` (authored in `games/<name>/metadata.json`), the archive's file, format, SHA-256 and size, and the `Components` it needs (derived from `game.json` by `ComponentsFor`). `Validate` rejects unsafe names, non-semantic versions, malformed checksums and newer schema versions. `ValidName` is the single rule for names used as path segments or URL parts. `package` writes `<name>.manifest.json` beside the archive. The archive is hashed while it is written (`archive.Result`), never re-read.
+
 ### `internal/fs/fs.go`
 Simple filesystem helpers that are needed in more than one place: copy a file, copy a directory, check if a directory exists and isn't empty, resolve an absolute path.
 

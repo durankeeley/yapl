@@ -20,7 +20,7 @@ import (
 )
 
 // Version is bumped whenever a lifecycle command changes behaviour.
-const Version = "1.1.0"
+const Version = "1.2.0"
 
 // Module registers the lifecycle commands with the kernel.
 type Module struct{}
@@ -140,22 +140,39 @@ func runCommand() kernel.Command {
 
 func packageCommand() kernel.Command {
 	return kernel.Command{
-		Verb:     "package",
-		Usage:    "package <name> [flags]",
-		Summary:  "Create a distributable archive",
-		Examples: []string{`yapl package "Doom"`, `yapl package "Doom" --format zst --bundle-deps --yes`},
+		Verb:        "package",
+		Usage:       "package <name> [flags]",
+		Summary:     "Create a distributable archive with a manifest",
+		Description: "Writes <name>.tar.<format>, plus <name>.manifest.json (title, version, SHA-256, required components) and the cover art when the game has one. metadata.json is created in the game directory if missing.",
+		Examples: []string{
+			`yapl package "Doom"`,
+			`yapl package "Doom" --version 1.2.0 --output-dir ./dist`,
+			`yapl package "Doom" --format zst --bundle-deps --yes`,
+		},
 		Flags: func(fs *flag.FlagSet) {
 			configFlag(fs)
 			fs.String("format", defaults.PackageFormat, "Compression `format`: "+strings.Join(defaults.PackageFormats, ", ")+".")
 			fs.Bool("bundle-deps", false, "Bundle Proton and dependencies into the archive for offline machines.")
 			fs.Bool("yes", false, "Skip confirmation prompts.")
+			fs.String("version", "", "Package `version` (MAJOR.MINOR.PATCH); saved to metadata.json.")
+			fs.String("output-dir", ".", "Directory `path` to write the archive and its sidecar files to.")
+			fs.Bool("fetch-cover", false, "Download cover art from Steam when steam_app_id is set and the game has no cover.")
 		},
 		Run: func(ctx *kernel.Context) error {
 			a, err := findApp(ctx)
 			if err != nil {
 				return err
 			}
-			return a.Package(ctx.String("format"), ctx.Bool("bundle-deps"), ctx.Bool("yes"))
+			_, err = a.Package(app.PackageOptions{
+				Format:     ctx.String("format"),
+				BundleDeps: ctx.Bool("bundle-deps"),
+				Yes:        ctx.Bool("yes"),
+				OutputDir:  ctx.String("output-dir"),
+				Version:    ctx.String("version"),
+				FetchCover: ctx.Bool("fetch-cover"),
+				CreatedBy:  "yapl lifecycle/" + Version,
+			})
+			return err
 		},
 	}
 }

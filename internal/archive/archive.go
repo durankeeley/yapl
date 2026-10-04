@@ -3,6 +3,8 @@ package archive
 import (
 	"archive/tar"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -51,25 +53,46 @@ func (a *Archive) Extract(destPath string, stripTopLevelDir bool) error {
 	return extractTar(decompressedReader, destPath, stripTopLevelDir)
 }
 
-// Package creates a new compressed bundle from a source directory.
-func Package(sourceDir, format string) error {
-	if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
-		return fmt.Errorf("application directory '%s' not found", sourceDir)
-	}
+// Result describes an archive written by Package or PackageFromDir.
+type Result struct {
+	Path      string
+	Format    string
+	SHA256    string
+	SizeBytes int64
+}
 
+// Package compresses sourceDir (keeping its name as the top-level directory)
+// into outputDir/<name>.tar.<format>.
+func Package(sourceDir, outputDir, format string) (Result, error) {
+	if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
+		return Result{}, fmt.Errorf("application directory '%s' not found", sourceDir)
+	}
+	return writeArchive(filepath.Base(sourceDir), sourceDir, filepath.Dir(sourceDir), outputDir, format)
+}
+
+// PackageFromDir compresses every entry of dir, with archive names relative
+// to dir itself, into outputDir/<archiveName>.tar.<format>.
+func PackageFromDir(dir, archiveName, outputDir, format string) (Result, error) {
+	return writeArchive(archiveName, dir, dir, outputDir, format)
+}
+
+func writeArchive(name, walkDir, baseDir, outputDir, format string) (Result, error) {
 	extension, err := getExtensionForFormat(format)
 	if err != nil {
-		return err
+		return Result{}, err
 	}
-
-	packageName := filepath.Base(sourceDir) + extension
-	fmt.Printf("-> Creating %s bundle '%s'...\n", strings.ToUpper(format), packageName)
-	if err := createBundle(packageName, sourceDir, filepath.Dir(sourceDir), format); err != nil {
-		return fmt.Errorf("failed to create package: %w", err)
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return Result{}, fmt.Errorf("create output dir: %w", err)
+	}
+	res := Result{Path: filepath.Join(outputDir, name+extension), Format: format}
+	fmt.Printf("-> Creating %s bundle '%s'...\n", strings.ToUpper(format), res.Path)
+	res.SHA256, res.SizeBytes, err = createBundle(res.Path, walkDir, baseDir, format)
+	if err != nil {
+		return Result{}, fmt.Errorf("failed to create package: %w", err)
 	}
 	fmt.Println("\n✅ Packaging complete!")
-	fmt.Printf("➡️ Distribute '%s' to other machines.\n", packageName)
-	return nil
+	fmt.Printf("➡️ Distribute '%s' to other machines.\n", res.Path)
+	return res, nil
 }
 
 // Unpackage extracts one or more archives into a target directory.
@@ -109,23 +132,6 @@ func Unpackage(targetDir string, archivePaths []string) error {
 		}
 	}
 	fmt.Println("\n✨ Unpackaging complete!")
-	return nil
-}
-
-// PackageFromDir creates a compressed bundle from all contents of dir,
-// using archive entry names relative to dir itself (not its parent).
-func PackageFromDir(dir, archiveName, format string) error {
-	extension, err := getExtensionForFormat(format)
-	if err != nil {
-		return err
-	}
-	packageName := archiveName + extension
-	fmt.Printf("-> Creating %s bundle '%s'...\n", strings.ToUpper(format), packageName)
-	if err := createBundle(packageName, dir, dir, format); err != nil {
-		return fmt.Errorf("failed to create package: %w", err)
-	}
-	fmt.Println("\n✅ Packaging complete!")
-	fmt.Printf("➡️ Distribute '%s' to other machines.\n", packageName)
 	return nil
 }
 
@@ -306,33 +312,69 @@ func extractTar(r io.Reader, destPath string, stripTopLevelDir bool) error {
 	}
 }
 
-func createBundle(bundleName, walkDir, baseDir, format string) error {
-	f, err := os.Create(bundleName)
+// createBundle writes the archive, hashing and counting the compressed bytes
+// as they are written so the file never needs re-reading.
+func createBundle(bundlePath, walkDir, baseDir, format string) (sha string, size int64, err error) {
+	f, err := os.Create(bundlePath)
 	if err != nil {
-		return fmt.Errorf("create bundle: %w", err)
+		return "", 0, fmt.Errorf("create bundle: %w", err)
 	}
-	defer f.Close()
+	hasher := sha256.New()
+	counter := &countingWriter{}
+	sink := io.MultiWriter(f, hasher, counter)
 
 	var compressor io.WriteCloser
 	switch format {
 	case "gz":
-		compressor = gzip.NewWriter(f)
+		compressor = gzip.NewWriter(sink)
 	case "xz":
-		compressor, err = xz.NewWriter(f)
+		compressor, err = xz.NewWriter(sink)
 	case "zst":
-		compressor, err = zstd.NewWriter(f)
+		compressor, err = zstd.NewWriter(sink)
 	}
 	if err != nil {
-		return fmt.Errorf("create %s writer: %w", format, err)
+		f.Close()
+		return "", 0, fmt.Errorf("create %s writer: %w", format, err)
 	}
-	defer compressor.Close()
 
 	tw := tar.NewWriter(compressor)
-	defer tw.Close()
+	walkErr := writeTree(tw, walkDir, baseDir, bundlePath)
+	for _, closeErr := range []error{tw.Close(), compressor.Close(), f.Close()} {
+		if walkErr == nil {
+			walkErr = closeErr
+		}
+	}
+	if walkErr != nil {
+		os.Remove(bundlePath)
+		return "", 0, walkErr
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), counter.n, nil
+}
 
+// Archive entries are owned by "nobody" so extracting on another machine
+// never recreates the packager's user and group IDs.
+const (
+	anonymousID   = 65534
+	anonymousName = "nobody"
+)
+
+type countingWriter struct{ n int64 }
+
+func (c *countingWriter) Write(p []byte) (int, error) {
+	c.n += int64(len(p))
+	return len(p), nil
+}
+
+// writeTree adds walkDir to tw with names relative to baseDir, skipping the
+// archive being written in case it lives inside walkDir.
+func writeTree(tw *tar.Writer, walkDir, baseDir, skip string) error {
+	skipAbs, _ := filepath.Abs(skip)
 	return filepath.Walk(walkDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+		if abs, _ := filepath.Abs(path); abs == skipAbs {
+			return nil
 		}
 		header, err := tar.FileInfoHeader(info, info.Name())
 		if err != nil {
@@ -349,8 +391,8 @@ func createBundle(bundleName, walkDir, baseDir, format string) error {
 				return err
 			}
 		}
-		header.Uid, header.Gid = 65534, 65534
-		header.Uname, header.Gname = "nobody", "nobody"
+		header.Uid, header.Gid = anonymousID, anonymousID
+		header.Uname, header.Gname = anonymousName, anonymousName
 
 		if err := tw.WriteHeader(header); err != nil {
 			return err
