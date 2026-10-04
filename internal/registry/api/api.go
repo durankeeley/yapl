@@ -4,13 +4,18 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"yapl/internal/manifest"
 	"yapl/internal/registry/store"
@@ -39,7 +44,17 @@ type Info struct {
 	Modules     map[string]string `json:"modules"`
 	Auth        string            `json:"auth"`
 	PushEnabled bool              `json:"push_enabled"`
+	// Platform is GOOS/GOARCH of the server binary, so self-upgrade never
+	// installs a binary built for another machine type.
+	Platform string `json:"platform"`
 }
+
+// BinaryPath serves the server's own yapl binary for `yapl upgrade self`.
+// It is a permanent path: even clients on an older API can always reach it.
+const BinaryPath = "/v1/yapl/binary"
+
+// Platform is this build's GOOS/GOARCH.
+func Platform() string { return runtime.GOOS + "/" + runtime.GOARCH }
 
 // CatalogEntry is a store summary plus the URL of its cover, if any.
 type CatalogEntry struct {
@@ -72,15 +87,36 @@ type Config struct {
 }
 
 type handler struct {
-	cfg Config
+	cfg        Config
+	binaryPath string
+	binarySHA  string
 }
 
 // New returns the registry's HTTP handler.
 func New(cfg Config) http.Handler {
+	return newHandler(cfg, "", "")
+}
+
+// NewWithBinary also serves binaryPath at BinaryPath for self-upgrades.
+func NewWithBinary(cfg Config, binaryPath string) (http.Handler, error) {
+	f, err := os.Open(binaryPath)
+	if err != nil {
+		return nil, fmt.Errorf("open server binary: %w", err)
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return nil, fmt.Errorf("hash server binary: %w", err)
+	}
+	return newHandler(cfg, binaryPath, hex.EncodeToString(h.Sum(nil))), nil
+}
+
+func newHandler(cfg Config, binaryPath, binarySHA string) http.Handler {
 	cfg.Info.APIVersion = APIVersion
+	cfg.Info.Platform = Platform()
 	cfg.Info.Auth = cfg.Auth
 	cfg.Info.PushEnabled = cfg.AllowPush
-	h := &handler{cfg: cfg}
+	h := &handler{cfg: cfg, binaryPath: binaryPath, binarySHA: binarySHA}
 
 	protected := http.NewServeMux()
 	protected.HandleFunc("GET /v1/packages", h.catalog)
@@ -93,6 +129,7 @@ func New(cfg Config) http.Handler {
 	protected.HandleFunc("GET /v1/components/{kind}/{version}/manifest", h.componentManifest)
 	protected.HandleFunc("GET /v1/components/{kind}/{version}/archive", h.componentArchive)
 	protected.HandleFunc("PUT /v1/components/{kind}/{version}", h.pushComponent)
+	protected.HandleFunc("GET "+BinaryPath, h.binary)
 	protected.HandleFunc("GET /packages", h.legacyList)
 	protected.HandleFunc("GET /packages/{name}", h.legacyDownload)
 
@@ -178,6 +215,16 @@ func (h *handler) cover(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", mime.TypeByExtension(filepath.Ext(v.CoverPath)))
 	serveFile(w, r, v.CoverPath)
+}
+
+func (h *handler) binary(w http.ResponseWriter, r *http.Request) {
+	if h.binaryPath == "" {
+		writeError(w, http.StatusNotFound, errors.New("this server does not offer its binary"))
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set(SHA256Header, h.binarySHA)
+	serveFile(w, r, h.binaryPath)
 }
 
 func (h *handler) legacyList(w http.ResponseWriter, r *http.Request) {

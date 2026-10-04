@@ -152,3 +152,24 @@ func TestAllowPush(t *testing.T) {
 		}
 	})
 }
+
+func TestBinaryOffer(t *testing.T) {
+	t.Run("given a binary path when the server is built then the binary is downloadable", func(t *testing.T) {
+		bin := filepath.Join(t.TempDir(), "yapl")
+		os.WriteFile(bin, []byte("ELF"), 0755)
+		s, err := server.New(server.Config{PackagesDir: t.TempDir(), Auth: "open", BinaryPath: bin, Warnings: io.Discard})
+		if err != nil {
+			t.Fatal(err)
+		}
+		srv := httptest.NewServer(s.Handler())
+		defer srv.Close()
+		resp, err := http.Get(srv.URL + api.BinaryPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if body, _ := io.ReadAll(resp.Body); string(body) != "ELF" {
+			t.Fatalf("body = %q", body)
+		}
+	})
+}

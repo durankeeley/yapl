@@ -9,6 +9,8 @@
 
 ---
 
+> **Partly superseded (2026-10-04):** `yapl upgrade` (PRD-45) covers games, the yapl binary and catalog pins. Forcing a re-download of a mutable DXVK/VKD3D/runtime URL is still open here.
+
 ## 1. Problem & Context
 
 `app.Run()` and `app.Setup()` accept a `--upgrade-proton` flag that forces re-download of the Proton version. No equivalent flag exists for DXVK, VKD3D, or the Steam Linux Runtime. If a user updates their `runner.json` to point to a new DXVK version, the old directory is used from cache because `ensure()` in `dependency.go` only downloads if the directory does not exist.

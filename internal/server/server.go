@@ -29,6 +29,8 @@ type Config struct {
 	Modules map[string]string
 	// AllowPush enables uploads (yapl push).
 	AllowPush bool
+	// BinaryPath, when set, is offered to clients for `yapl upgrade self`.
+	BinaryPath string
 	// Warnings receives scan problems; nil means stderr.
 	Warnings io.Writer
 }
@@ -59,13 +61,20 @@ func New(cfg Config) (*Server, error) {
 	if cfg.AllowPush && cfg.Auth == api.AuthOpen {
 		fmt.Fprintln(cfg.Warnings, "warning: push is enabled without a password; anyone on the LAN can publish packages")
 	}
-	h := api.New(api.Config{
+	apiCfg := api.Config{
 		Store:     st,
 		Auth:      cfg.Auth,
 		Password:  cfg.Password,
 		AllowPush: cfg.AllowPush,
 		Info:      api.Info{Kernel: cfg.Kernel, Modules: cfg.Modules},
-	})
+	}
+	h := api.New(apiCfg)
+	if cfg.BinaryPath != "" {
+		var err error
+		if h, err = api.NewWithBinary(apiCfg, cfg.BinaryPath); err != nil {
+			return nil, err
+		}
+	}
 	return &Server{cfg: cfg, store: st, handler: h}, nil
 }
 

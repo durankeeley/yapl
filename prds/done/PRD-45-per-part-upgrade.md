@@ -1,6 +1,6 @@
 # PRD-45 - `yapl upgrade`: Upgrade Only the Parts That Changed
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** L
 **Sprint:** Phase 2 — Registry server
@@ -45,10 +45,10 @@ yapl upgrade catalog         # add newer pinned components to runner.json
 
 ## 4. Execution & Milestones
 
-- [ ] `upgrade.Plan` table tests.
-- [ ] Preserve-and-swap tests (saves survive, rollback on failure).
-- [ ] Self-upgrade endpoint + client tests (writes into a temp "executable" path in tests).
-- [ ] `upgrade` command; README "Upgrading" section; PRD-11 marked superseded for game/self paths.
+- [x] `upgrade.Plan` table tests.
+- [x] Preserve-and-swap tests (saves survive, rollback on failure).
+- [x] Self-upgrade endpoint + client tests (writes into a temp "executable" path in tests).
+- [x] `upgrade` command; README "Upgrading" section; PRD-11 marked superseded for game/self paths.
 
 ### Acceptance scenarios
 * **Given** Doom 1.0.0 installed with a save in `prefix/drive_c/users/steamuser/Saved Games/doom.sav` **and** 1.1.0 on the server **when** I `upgrade Doom` **then** `installed.json` says 1.1.0 and the save file is unchanged.

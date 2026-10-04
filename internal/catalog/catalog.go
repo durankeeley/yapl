@@ -42,6 +42,7 @@ func Default() config.Global {
 			DXVK:    DXVKVersion,
 			VKD3D:   VKD3DVersion,
 		},
+		CatalogVersion: Version,
 	}
 }
 

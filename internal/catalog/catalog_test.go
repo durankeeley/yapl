@@ -73,3 +73,11 @@ func TestModule(t *testing.T) {
 		}
 	})
 }
+
+func TestDefaultRecordsCatalogVersion(t *testing.T) {
+	t.Run("given the catalog then the runner config it produces records the catalog version", func(t *testing.T) {
+		if Default().CatalogVersion != Version {
+			t.Fatalf("catalog_version = %q", Default().CatalogVersion)
+		}
+	})
+}

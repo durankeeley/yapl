@@ -131,3 +131,57 @@ func TestPullInstallsAndRemembersServer(t *testing.T) {
 		}
 	})
 }
+
+func TestUpgradeCommand(t *testing.T) {
+	t.Run("given an outdated pulled game when upgrade runs then it is listed and then upgraded", func(t *testing.T) {
+		// Given a source library publishing two versions and a console that pulled the first
+		dir := t.TempDir()
+		orig, _ := os.Getwd()
+		defer os.Chdir(orig)
+		source, console := filepath.Join(dir, "source"), filepath.Join(dir, "console")
+		os.MkdirAll(filepath.Join(source, "games", "Doom"), 0755)
+		os.MkdirAll(console, 0755)
+		os.WriteFile(filepath.Join(source, "games", "Doom", "game.json"), []byte(`{"proton_version":"system","launch_method":"direct","executable":"drive_c/doom.exe"}`), 0644)
+		os.WriteFile(filepath.Join(source, "runner.json"), []byte(`{"proton_versions":{}}`), 0644)
+		st := registrystore.New(t.TempDir(), io.Discard)
+		st.Refresh()
+		srv := httptest.NewServer(api.New(api.Config{Store: st, Auth: "open", AllowPush: true}))
+		defer srv.Close()
+		os.Chdir(source)
+		execute(t, "push", "Doom", "--version", "1.0.0", "--server", srv.URL)
+		os.Chdir(console)
+		execute(t, "pull", "Doom", "--server", srv.URL)
+		os.Chdir(source)
+		execute(t, "push", "Doom", "--version", "1.1.0", "--server", srv.URL)
+		os.Chdir(console)
+
+		// When the plan is shown
+		code, out, errOut := execute(t, "upgrade")
+
+		// Then Doom is listed as upgradable
+		if code != kernel.ExitOK || !strings.Contains(out, "Doom") || !strings.Contains(out, "1.1.0") {
+			t.Fatalf("plan exit %d:\n%s\n%s", code, out, errOut)
+		}
+
+		// When it is upgraded
+		code, out, errOut = execute(t, "upgrade", "Doom")
+
+		// Then installed.json says 1.1.0
+		data, _ := os.ReadFile(filepath.Join("games", "Doom", "installed.json"))
+		if code != kernel.ExitOK || !strings.Contains(string(data), `"version": "1.1.0"`) {
+			t.Fatalf("upgrade exit %d:\n%s\n%s\ninstalled: %s", code, out, errOut, data)
+		}
+	})
+
+	t.Run("given an old runner.json when upgrade catalog runs then no server is needed", func(t *testing.T) {
+		dir := t.TempDir()
+		orig, _ := os.Getwd()
+		os.Chdir(dir)
+		defer os.Chdir(orig)
+		os.WriteFile("runner.json", []byte(`{"proton_versions":{}}`), 0644)
+		code, out, errOut := execute(t, "upgrade", "catalog")
+		if code != kernel.ExitOK || !strings.Contains(out, "catalog") {
+			t.Fatalf("exit %d\n%s\n%s", code, out, errOut)
+		}
+	})
+}

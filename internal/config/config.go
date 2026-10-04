@@ -30,6 +30,8 @@ type Global struct {
 	RuntimeVersions    map[string]VersionInfo            `json:"runtime_versions"`
 	DependencyVersions map[string]map[string]VersionInfo `json:"dependency_versions"`
 	Defaults           Defaults                          `json:"defaults,omitempty"`
+	// CatalogVersion records which defaults catalog last updated this file.
+	CatalogVersion string `json:"catalog_version,omitempty"`
 }
 
 // Defaults names the versions new game and app configs are created with.
@@ -207,6 +209,7 @@ func MergeGlobal(local, bundled Global) (Global, []string) {
 		RuntimeVersions:    mergeVersions(local.RuntimeVersions, bundled.RuntimeVersions, paths.KindRuntime, &added),
 		DependencyVersions: map[string]map[string]VersionInfo{},
 		Defaults:           mergeDefaults(local.Defaults, bundled.Defaults),
+		CatalogVersion:     local.CatalogVersion,
 	}
 	for kind, versions := range local.DependencyVersions {
 		merged.DependencyVersions[kind] = versions

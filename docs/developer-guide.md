@@ -265,6 +265,13 @@ Here's what happens when you type `./yapl pull "Doom:1.2.0"`:
 
 ---
 
+## How `upgrade` works
+
+* **`upgrade.Plan`** is a pure function over `LocalState` (installed packages from `installed.json`, this binary's `kernel.Versions`, runner.json's `catalog_version`) and `RemoteState` (server catalog, server versions from `/v1/info`). It is table-tested.
+* **`upgrade.Game`** reuses `pull.EnsureComponents` and `pull.Fetch` to stage and verify the new version, overlays preserved paths from the old install (`fs.OverlayDir`, which replaces files and symlinks in place), then `swap` renames the old install into `.staging/previous-*`, renames the new one into place and only then deletes the old one, restoring it if the second rename fails.
+* **`upgrade.Self`** refuses another platform (`/v1/info.platform`) and uses `NewerBinary`: newer in at least one part (kernel or module), older in none. The download is verified against `X-Yapl-SHA256` before it is renamed over `os.Executable()`.
+* **`upgrade.Catalog`** merges `catalog.Default()` into runner.json and adopts its defaults and `catalog_version`.
+
 ## How to add a new command
 
 1. Pick the module the command belongs to (or create `internal/modules/<name>` with `const Version` and a `Module` type, and register it in `cmd/yapl/main.go`).

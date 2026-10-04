@@ -273,3 +273,30 @@ yapl push "Doom" --version 1.0.0
 yapl push "Doom" --version 1.1.0 --server 192.168.1.10:8471 --auth password --password lanparty
 ```
 
+## `yapl upgrade`
+
+Upgrade only the parts that changed: games, yapl itself, or the defaults catalog
+
+```
+yapl upgrade [name[:version] | self | catalog] [flags]
+```
+
+Without arguments, lists what is out of date. With a name, installs the server's newer version of that game and keeps its saves (prefix/drive_c/users, prefix/user.reg and metadata.json "preserve" paths); an explicit :version can roll back. 'self' replaces this yapl binary with the server's when the server's is newer in some module and older in none. 'catalog' adds the newer pinned Proton, runtime, DXVK and VKD3D versions to runner.json. --all upgrades every outdated game plus the catalog.
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--all` | Upgrade every outdated game and the catalog. |  |
+| `--auth <mode>` | Auth mode: open or password. | `open` |
+| `--password <string>` | Password for password auth (default $YAPL_PASSWORD). |  |
+| `--port <port>` | UDP port to listen on for discovery. | `8471` |
+| `--server <address>` | Server address (host:port or URL). Auto-discovered when omitted. |  |
+
+```bash
+yapl upgrade
+yapl upgrade "Doom"
+yapl upgrade "Doom:1.0.0"
+yapl upgrade --all
+yapl upgrade self
+yapl upgrade catalog
+```
+

@@ -94,3 +94,45 @@ func CopyDir(src, dst string) error {
 	}
 	return nil
 }
+
+// OverlayDir copies src (a file, symlink or directory) onto dst, replacing
+// whatever is at each destination path while leaving unrelated files in dst
+// alone. Upgrades use it to lay saved data over a freshly installed version.
+func OverlayDir(src, dst string) error {
+	info, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+	if existing, err := os.Lstat(dst); err == nil && (existing.IsDir() != info.IsDir() || existing.Mode()&os.ModeSymlink != 0 || info.Mode()&os.ModeSymlink != 0) {
+		if err := os.RemoveAll(dst); err != nil {
+			return err
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+	switch {
+	case info.Mode()&os.ModeSymlink != 0:
+		target, err := os.Readlink(src)
+		if err != nil {
+			return err
+		}
+		return os.Symlink(target, dst)
+	case info.IsDir():
+		if err := os.MkdirAll(dst, info.Mode().Perm()); err != nil {
+			return err
+		}
+		entries, err := os.ReadDir(src)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			if err := OverlayDir(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return CopyFile(src, dst)
+	}
+}

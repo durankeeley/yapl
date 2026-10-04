@@ -107,6 +107,8 @@ YAPL automatically finds the game in `games/` or `apps/` — you never need to s
 | `serve`                        | Starts a LAN package server that hosts packaged archives for clients to pull.    |
 | `pull --server <addr> list`    | Lists packages available on a YAPL server.                                       |
 | `pull --server <addr> <name>`  | Downloads and unpackages a game from a YAPL server.                              |
+| `push <name>`                  | Publishes a game and any components the server lacks.                            |
+| `upgrade [name\|self\|catalog]` | Upgrades only the parts whose version changed.                                   |
 | `version`                      | Shows the version of the kernel and each module.                                 |
 | `help [command]`               | Shows all commands, or one command's flags and examples.                         |
 
@@ -215,6 +217,7 @@ The server rescans the directory every 30 seconds, so new packages show up witho
 | GET | `/v1/components/{kind}/{version}/archive` | The component archive (`.tar.zst`) |
 | PUT | `/v1/packages/{name}/{version}` | Upload a package (multipart: `archive`, `cover`, `manifest`). Needs `--allow-push`. |
 | PUT | `/v1/components/{kind}/{version}` | Upload a component (multipart: `archive`, `manifest`). Needs `--allow-push`. |
+| GET | `/v1/yapl/binary` | The server's own `yapl` binary (with `X-Yapl-SHA256`), used by `yapl upgrade self` |
 | GET | `/packages`, `/packages/{name}` | Legacy endpoints for older YAPL clients (latest version only) |
 
 Names and versions that aren't safe path segments (`..`, `/`, a leading `.`) are rejected with `400`.
@@ -265,6 +268,28 @@ Pulling a game that's already installed tells you to use `yapl upgrade` instead.
 Every download (Proton, runtime, DXVK and packages) shows progress such as `Downloading GE-Proton11-7-x86_64.tar.gz: 412.0 MB / 480.3 MB (85.8%)`. When output goes to a file or pipe, YAPL writes one line per 10% instead of redrawing the line.
 
 Auto-discovery listens for the server's UDP broadcast on port 8471 for up to 3 seconds. If discovery times out, pass `--server` to give the address directly. `--password` falls back to the `YAPL_PASSWORD` environment variable.
+
+### `upgrade` — update only what changed
+
+Every part of YAPL has its own version: each game, each component, each module of the `yapl` binary, and the defaults catalog. `upgrade` moves only the parts that changed:
+
+```bash
+./yapl upgrade                # what's out of date?
+# PART     NAME         CURRENT       AVAILABLE
+# game     Doom         1.0.0         1.1.0
+# yapl     yapl         store 2.0.0   store 2.1.0
+# catalog  runner.json  2026.04.0    2026.10.0
+
+./yapl upgrade "Doom"         # newer Doom, keeping saves
+./yapl upgrade "Doom:1.0.0"   # roll back to a specific version
+./yapl upgrade --all          # every outdated game, plus the catalog
+./yapl upgrade self           # replace this yapl with the server's newer build
+./yapl upgrade catalog        # add newer pinned Proton/runtime/DXVK/VKD3D to runner.json (no server needed)
+```
+
+* **Games** download and verify the new version first, only installing it when complete. Your saves move across: `prefix/drive_c/users/`, `prefix/user.reg`, and any paths listed under `preserve` in `metadata.json` (relative to the game directory, globs allowed). The old version is deleted only after the new one is in place. If anything fails, the old install is left untouched. Components the new version needs are pulled automatically, and old ones stay for other games.
+* **`self`** compares the server's per-module versions with yours. It upgrades only when the server is newer in at least one part and older in none, and refuses a binary built for a different OS or CPU. The server offers its own binary at `/v1/yapl/binary`, so one updated server can update every LAN machine.
+* **`catalog`** adds pins without removing your entries and switches the `defaults` block to the new pins. Existing games keep the exact versions in their `game.json`; only new games use the new defaults.
 
 ### Package metadata and manifests
 

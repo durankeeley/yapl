@@ -3,6 +3,7 @@ package registry
 
 import (
 	"flag"
+	"os"
 
 	"yapl/internal/defaults"
 	"yapl/internal/kernel"
@@ -10,7 +11,7 @@ import (
 )
 
 // Version is bumped whenever the server's behaviour or API changes.
-const Version = "2.1.0"
+const Version = "2.2.0"
 
 // Module registers the registry commands with the kernel.
 type Module struct{}
@@ -45,6 +46,9 @@ func serveCommand() kernel.Command {
 				return kernel.UsageError("--packages-dir is required")
 			}
 			versions := ctx.Kernel.Versions()
+			// Offering our own binary lets clients run `yapl upgrade self`;
+			// if it can't be located the server still runs without it.
+			binary, _ := os.Executable()
 			s, err := server.New(server.Config{
 				PackagesDir: dir,
 				Port:        ctx.Int("port"),
@@ -53,6 +57,7 @@ func serveCommand() kernel.Command {
 				Kernel:      versions.Kernel,
 				Modules:     versions.Modules,
 				AllowPush:   ctx.Bool("allow-push"),
+				BinaryPath:  binary,
 			})
 			if err != nil {
 				return err

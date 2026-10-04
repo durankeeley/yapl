@@ -1,14 +1,18 @@
 package client
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 
 	"yapl/internal/manifest"
+	"yapl/internal/progress"
 	"yapl/internal/registry/api"
 )
 
@@ -159,3 +163,42 @@ func (c *Client) open(path string) (io.ReadCloser, int64, error) {
 	}
 	return resp.Body, resp.ContentLength, nil
 }
+
+// DownloadBinary saves the server's yapl binary to dest, verifying it
+// against the checksum header. dest is removed on any failure.
+func (c *Client) DownloadBinary(dest string, report progress.Func) error {
+	req, err := http.NewRequest(http.MethodGet, c.cfg.Server+api.BinaryPath, nil)
+	if err != nil {
+		return err
+	}
+	c.applyAuth(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return serverError(resp)
+	}
+	want := resp.Header.Get(api.SHA256Header)
+	f, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, executableMode)
+	if err != nil {
+		return err
+	}
+	h := sha256.New()
+	_, copyErr := io.Copy(io.MultiWriter(f, h), progress.NewReader(resp.Body, "yapl", resp.ContentLength, report))
+	if closeErr := f.Close(); copyErr == nil {
+		copyErr = closeErr
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); copyErr == nil && (want == "" || got != want) {
+		copyErr = fmt.Errorf("binary checksum mismatch: got %s, server says %q", got, want)
+	}
+	if copyErr != nil {
+		os.Remove(dest)
+		return copyErr
+	}
+	return nil
+}
+
+// executableMode is applied to a downloaded yapl binary.
+const executableMode = 0755

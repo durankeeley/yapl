@@ -20,10 +20,11 @@ import (
 	"yapl/internal/paths"
 	"yapl/internal/publish"
 	"yapl/internal/pull"
+	"yapl/internal/upgrade"
 )
 
 // Version is bumped whenever a store command changes behaviour.
-const Version = "2.0.0"
+const Version = "2.1.0"
 
 const bytesPerMegabyte = 1 << 20
 
@@ -34,7 +35,7 @@ func (Module) Name() string    { return "store" }
 func (Module) Version() string { return Version }
 
 func (Module) Commands() []kernel.Command {
-	return []kernel.Command{pullCommand(), pushCommand()}
+	return []kernel.Command{pullCommand(), pushCommand(), upgradeCommand()}
 }
 
 func serverFlags(fs *flag.FlagSet) {
@@ -221,4 +222,123 @@ func printLegacyCatalog(ctx *kernel.Context, c *client.Client) error {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d MB\n", e.Name, e.Type, e.Format, e.SizeBytes/bytesPerMegabyte)
 	}
 	return tw.Flush()
+}
+
+// Arguments to upgrade that name a part rather than a game.
+const (
+	upgradeSelf    = "self"
+	upgradeCatalog = "catalog"
+)
+
+func upgradeCommand() kernel.Command {
+	return kernel.Command{
+		Verb:    "upgrade",
+		Usage:   "upgrade [name[:version] | self | catalog] [flags]",
+		Summary: "Upgrade only the parts that changed: games, yapl itself, or the defaults catalog",
+		Description: "Without arguments, lists what is out of date. With a name, installs the server's newer version of that game and keeps its saves (prefix/drive_c/users, prefix/user.reg and metadata.json \"preserve\" paths); an explicit :version can roll back. " +
+			"'self' replaces this yapl binary with the server's when the server's is newer in some module and older in none. 'catalog' adds the newer pinned Proton, runtime, DXVK and VKD3D versions to runner.json. --all upgrades every outdated game plus the catalog.",
+		Examples: []string{
+			"yapl upgrade",
+			`yapl upgrade "Doom"`,
+			`yapl upgrade "Doom:1.0.0"`,
+			"yapl upgrade --all",
+			"yapl upgrade self",
+			"yapl upgrade catalog",
+		},
+		Flags: func(fs *flag.FlagSet) {
+			serverFlags(fs)
+			fs.Bool("all", false, "Upgrade every outdated game and the catalog.")
+		},
+		Run: func(ctx *kernel.Context) error {
+			target := ctx.Arg(0)
+			opts := upgrade.Options{Out: ctx.Stdout}
+			if target == upgradeCatalog {
+				return upgradeCatalogPart(ctx)
+			}
+			c, err := connect(ctx)
+			if err != nil {
+				return err
+			}
+			switch {
+			case target == upgradeSelf:
+				exe, err := os.Executable()
+				if err != nil {
+					return fmt.Errorf("locate this yapl binary: %w", err)
+				}
+				_, err = upgrade.Self(c, ctx.Kernel.Versions(), exe, opts)
+				return err
+			case target != "":
+				name, tag := manifest.ParseReference(target)
+				_, _, err := upgrade.Game(c, name, tag, opts)
+				return err
+			}
+			items, err := plan(ctx, c)
+			if err != nil {
+				return err
+			}
+			if !ctx.Bool("all") {
+				printPlan(ctx, items)
+				return nil
+			}
+			for _, item := range items {
+				switch item.Part {
+				case upgrade.PartYAPL:
+					fmt.Fprintln(ctx.Stdout, "-> A newer yapl is available; run 'yapl upgrade self' to install it")
+				case upgrade.PartCatalog:
+					err = upgradeCatalogPart(ctx)
+				default:
+					_, _, err = upgrade.Game(c, item.Name, manifest.LatestTag, opts)
+				}
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+}
+
+func plan(ctx *kernel.Context, c *client.Client) ([]upgrade.Item, error) {
+	installed, err := upgrade.Installed()
+	if err != nil {
+		return nil, err
+	}
+	runner, _ := config.LoadGlobal(paths.RunnerConfig)
+	local := upgrade.LocalState{Installed: installed, Binary: ctx.Kernel.Versions(), RunnerCatalog: runner.CatalogVersion, BinaryCatalog: catalog.Version}
+	var remote upgrade.RemoteState
+	if info, err := c.Info(); err == nil {
+		remote.Binary = kernel.Versions{Kernel: info.Kernel, Modules: info.Modules}
+	}
+	if entries, err := c.Catalog(); err == nil {
+		remote.Catalog = entries
+	} else {
+		fmt.Fprintf(ctx.Stderr, "warning: could not read the server catalog: %v\n", err)
+	}
+	return upgrade.Plan(local, remote), nil
+}
+
+func printPlan(ctx *kernel.Context, items []upgrade.Item) {
+	if len(items) == 0 {
+		fmt.Fprintln(ctx.Stdout, "Everything is up to date.")
+		return
+	}
+	tw := tabwriter.NewWriter(ctx.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "PART\tNAME\tCURRENT\tAVAILABLE")
+	for _, i := range items {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", i.Part, i.Name, i.From, i.To)
+	}
+	tw.Flush()
+	fmt.Fprintln(ctx.Stdout, "\nRun 'yapl upgrade <name>', 'yapl upgrade self', 'yapl upgrade catalog' or 'yapl upgrade --all'.")
+}
+
+func upgradeCatalogPart(ctx *kernel.Context) error {
+	added, err := upgrade.Catalog(paths.RunnerConfig)
+	if err != nil {
+		return err
+	}
+	for _, a := range added {
+		fmt.Fprintf(ctx.Stdout, "-> Added %s\n", a)
+	}
+	fmt.Fprintf(ctx.Stdout, "✅ runner.json now uses catalog %s\n", catalog.Version)
+	return nil
 }

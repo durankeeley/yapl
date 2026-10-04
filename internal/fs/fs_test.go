@@ -227,3 +227,58 @@ func TestCopyDir_CopiesNestedStructure(t *testing.T) {
 		t.Fatalf("content mismatch: got %q", got)
 	}
 }
+
+func TestOverlayDir(t *testing.T) {
+	t.Run("given an existing destination when overlaid then source files replace, symlinks are recreated and other files stay", func(t *testing.T) {
+		// Given
+		src, dst := t.TempDir(), t.TempDir()
+		os.MkdirAll(filepath.Join(src, "saves"), 0755)
+		os.WriteFile(filepath.Join(src, "saves", "slot1.sav"), []byte("old save"), 0644)
+		os.Symlink("/home/player/Documents", filepath.Join(src, "Documents"))
+		os.MkdirAll(filepath.Join(dst, "saves"), 0755)
+		os.WriteFile(filepath.Join(dst, "saves", "slot1.sav"), []byte("a longer default save file"), 0644)
+		os.WriteFile(filepath.Join(dst, "new-in-update.txt"), []byte("new"), 0644)
+		os.Symlink("/elsewhere", filepath.Join(dst, "Documents"))
+
+		// When
+		if err := OverlayDir(src, dst); err != nil {
+			t.Fatal(err)
+		}
+
+		// Then
+		if got, _ := os.ReadFile(filepath.Join(dst, "saves", "slot1.sav")); string(got) != "old save" {
+			t.Fatalf("save = %q", got)
+		}
+		if target, _ := os.Readlink(filepath.Join(dst, "Documents")); target != "/home/player/Documents" {
+			t.Fatalf("symlink = %q", target)
+		}
+		if _, err := os.Stat(filepath.Join(dst, "new-in-update.txt")); err != nil {
+			t.Fatal("unrelated destination file removed")
+		}
+	})
+
+	t.Run("given a single file source when overlaid then it replaces the destination file", func(t *testing.T) {
+		dir := t.TempDir()
+		src, dst := filepath.Join(dir, "user.reg"), filepath.Join(dir, "out", "user.reg")
+		os.WriteFile(src, []byte("old"), 0644)
+		if err := OverlayDir(src, dst); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(dst); string(got) != "old" {
+			t.Fatalf("dst = %q", got)
+		}
+	})
+
+	t.Run("given a directory where the destination has a file then the file is replaced by the directory", func(t *testing.T) {
+		src, dst := t.TempDir(), t.TempDir()
+		os.MkdirAll(filepath.Join(src, "cfg"), 0755)
+		os.WriteFile(filepath.Join(src, "cfg", "a"), []byte("a"), 0644)
+		os.WriteFile(filepath.Join(dst, "cfg"), []byte("was a file"), 0644)
+		if err := OverlayDir(src, dst); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(filepath.Join(dst, "cfg", "a")); string(got) != "a" {
+			t.Fatalf("got %q", got)
+		}
+	})
+}
