@@ -1,6 +1,6 @@
 # PRD-44 - Pull v2: Tags, Verified Streaming Install, Components, Remembered Server
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** High
 **Size:** L
 **Sprint:** Phase 2 — Registry server
@@ -23,9 +23,9 @@ yapl pull "Doom:1.2.0"     # specific tag
 yapl pull list
 ```
 * Resolve the manifest via `/v1/packages/{name}/{tag}/manifest`.
-* Stream archive → SHA-256 hasher → decompressor → tar extractor into a staging directory beside the target. Verify the hash at the end; on mismatch delete staging. Otherwise rename into `games/<Name>`.
+* Stream archive → SHA-256 hasher → decompressor → tar extractor into `<library>/.staging/` (same filesystem as the target, so the final move is an atomic rename). Verify the hash at the end; on mismatch delete staging. Otherwise rename into `games/<Name>`.
 * Fetch every missing component the same way into `proton/` or `dependencies/` and register it in `runner.json` (MergeGlobal, local entries win).
-* Download the cover into the game directory; write `installed.json` (`{name, version, server, installed_at}`) used by upgrade.
+* Cover art travels inside the package (it lives in the game directory), so no separate download is needed. Write `installed.json` (`{name, version, server, installed_at}`) used by upgrade.
 * Remember the server: after a successful discovery or `--server`, save `client.json` (`server`, `auth`). Later commands use it without discovery. `--server` always overrides.
 * If the server has no `/v1/info` (older YAPL), fall back to the legacy endpoints with a notice.
 
@@ -33,7 +33,7 @@ yapl pull list
 
 ### `internal/client`
 * `Info()`, `Catalog()`, `Manifest(name, tag)`, `Install(ctx, name, tag, root, progress)`, `InstallComponent(...)`.
-* `ParseReference("Doom:1.2.0") → (name, tag)`; default tag `latest`.
+* `ParseReference("Doom:1.2.0") → (name, tag)`; default tag `latest`. The suffix after the last `:` is a tag only when it is a semantic version or `latest`, so names containing colons still work.
 * `IsCompatible(serverInfo)` uses `version.IsCompatible` on API version.
 
 ### `internal/archive`
