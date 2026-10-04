@@ -1,6 +1,6 @@
 # PRD-20 - Centralise Hardcoded Directory Path Constants
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** Medium
 **Size:** S
 **Sprint:** Phase 1 — Out-of-the-box foundation

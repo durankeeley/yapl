@@ -1,6 +1,6 @@
 # PRD-26 - `--workdir` Flag for Non-CWD Deployments
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** Medium
 **Size:** M
 **Sprint:** Phase 1 — Out-of-the-box foundation
