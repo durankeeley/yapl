@@ -30,9 +30,14 @@ type cliResult struct {
 // runCLI executes the real yapl entry point in a subprocess rooted at workDir.
 func runCLI(t *testing.T, workDir string, args ...string) cliResult {
 	t.Helper()
+	return runCLIWithEnv(t, workDir, nil, args...)
+}
+
+func runCLIWithEnv(t *testing.T, workDir string, env []string, args ...string) cliResult {
+	t.Helper()
 	cmd := exec.Command(os.Args[0])
 	cmd.Dir = workDir
-	cmd.Env = append(os.Environ(), runMainEnv+"=1", "YAPL_TEST_ARGS="+strings.Join(args, "\x1f"))
+	cmd.Env = append(append(os.Environ(), env...), runMainEnv+"=1", "YAPL_TEST_ARGS="+strings.Join(args, "\x1f"))
 	out, err := cmd.CombinedOutput()
 	code := 0
 	if exitErr, ok := err.(*exec.ExitError); ok {
@@ -188,6 +193,61 @@ func TestSetupValidation(t *testing.T) {
 	t.Run("given a wrong kind when setup runs then it explains game or app", func(t *testing.T) {
 		res := runCLI(t, t.TempDir(), "setup", "movie", "Doom")
 		if res.exitCode != 2 || !strings.Contains(res.output, "game or app") {
+			t.Fatalf("exit %d:\n%s", res.exitCode, res.output)
+		}
+	})
+}
+
+func TestWorkdir(t *testing.T) {
+	t.Run("given --workdir before the command when list runs elsewhere then the library at workdir is listed", func(t *testing.T) {
+		// Given
+		library := t.TempDir()
+		writeGame(t, library, "Doom")
+
+		// When
+		res := runCLI(t, t.TempDir(), "--workdir", library, "list")
+
+		// Then
+		if res.exitCode != 0 || !strings.Contains(res.output, "Doom") {
+			t.Fatalf("exit %d:\n%s", res.exitCode, res.output)
+		}
+	})
+
+	t.Run("given YAPL_HOME and no flag when list runs then the library at YAPL_HOME is listed", func(t *testing.T) {
+		// Given
+		library := t.TempDir()
+		writeGame(t, library, "Quake")
+
+		// When
+		res := runCLIWithEnv(t, t.TempDir(), []string{"YAPL_HOME=" + library}, "list")
+
+		// Then
+		if res.exitCode != 0 || !strings.Contains(res.output, "Quake") {
+			t.Fatalf("exit %d:\n%s", res.exitCode, res.output)
+		}
+	})
+
+	t.Run("given both --workdir and YAPL_HOME then the flag wins", func(t *testing.T) {
+		// Given
+		flagLibrary, envLibrary := t.TempDir(), t.TempDir()
+		writeGame(t, flagLibrary, "FromFlag")
+		writeGame(t, envLibrary, "FromEnv")
+
+		// When
+		res := runCLIWithEnv(t, t.TempDir(), []string{"YAPL_HOME=" + envLibrary}, "--workdir", flagLibrary, "list")
+
+		// Then
+		if !strings.Contains(res.output, "FromFlag") || strings.Contains(res.output, "FromEnv") {
+			t.Fatalf("flag did not take precedence:\n%s", res.output)
+		}
+	})
+
+	t.Run("given a workdir that does not exist when a command runs then it fails clearly", func(t *testing.T) {
+		// When
+		res := runCLI(t, t.TempDir(), "--workdir", "/nonexistent/yapl-library", "list")
+
+		// Then
+		if res.exitCode != 1 || !strings.Contains(res.output, "workdir") {
 			t.Fatalf("exit %d:\n%s", res.exitCode, res.output)
 		}
 	})

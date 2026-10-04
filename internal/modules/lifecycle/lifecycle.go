@@ -14,15 +14,11 @@ import (
 	"yapl/internal/config"
 	"yapl/internal/defaults"
 	"yapl/internal/kernel"
+	"yapl/internal/paths"
 )
 
 // Version is bumped whenever a lifecycle command changes behaviour.
 const Version = "1.0.0"
-
-const (
-	kindGame = "game"
-	kindApp  = "app"
-)
 
 // Module registers the lifecycle commands with the kernel.
 type Module struct{}
@@ -66,7 +62,7 @@ func setupCommand() kernel.Command {
 		},
 		Run: func(ctx *kernel.Context) error {
 			kind, name := ctx.Arg(0), ctx.Arg(1)
-			if kind != kindGame && kind != kindApp {
+			if kind != paths.KindGame && kind != paths.KindApp {
 				return kernel.UsageError("the first argument must be game or app")
 			}
 			if name == "" {
@@ -76,7 +72,7 @@ func setupCommand() kernel.Command {
 			if method != "" && !slices.Contains(defaults.LaunchMethods, method) {
 				return kernel.UsageError("invalid --method %q: use one of %s", method, strings.Join(defaults.LaunchMethods, ", "))
 			}
-			a, err := loadApp(ctx, kind+"s", name, method)
+			a, err := loadApp(ctx, paths.TypeDir(kind), name, method)
 			if err != nil {
 				return err
 			}
@@ -133,14 +129,14 @@ func unpackageCommand() kernel.Command {
 		Examples:    []string{"yapl unpackage game Doom.tar.xz", "yapl unpackage game Doom.tar.xz Quake.tar.zst"},
 		Run: func(ctx *kernel.Context) error {
 			kind := ctx.Arg(0)
-			if kind != kindGame && kind != kindApp {
+			if kind != paths.KindGame && kind != paths.KindApp {
 				return kernel.UsageError("the first argument must be game or app")
 			}
 			archives := ctx.Args[1:]
 			if len(archives) == 0 {
 				return kernel.UsageError("at least one archive file is required")
 			}
-			targetDir := kind + "s"
+			targetDir := paths.TypeDir(kind)
 			if err := os.MkdirAll(targetDir, 0755); err != nil {
 				return fmt.Errorf("create %s: %w", targetDir, err)
 			}
@@ -227,7 +223,7 @@ func findApp(ctx *kernel.Context) (*app.App, error) {
 }
 
 func loadApp(ctx *kernel.Context, appType, name, method string) (*app.App, error) {
-	globalCfg, err := config.LoadOrCreateGlobal("runner.json")
+	globalCfg, err := config.LoadOrCreateGlobal(paths.RunnerConfig)
 	if err != nil {
 		return nil, fmt.Errorf("could not load global config: %w", err)
 	}

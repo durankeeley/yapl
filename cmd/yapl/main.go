@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
@@ -8,6 +9,7 @@ import (
 	"yapl/internal/modules/lifecycle"
 	"yapl/internal/modules/registry"
 	"yapl/internal/modules/store"
+	"yapl/internal/paths"
 )
 
 func modules() []kernel.Module {
@@ -31,4 +33,31 @@ func main() {
 }
 
 // configureGlobals registers flags accepted before the command.
-func configureGlobals(k *kernel.Kernel) {}
+func configureGlobals(k *kernel.Kernel) {
+	k.AddGlobalFlags(
+		func(fs *flag.FlagSet) {
+			fs.String(workdirFlag, "", "Library `path` to use instead of the current directory (default $"+paths.HomeEnv+").")
+		},
+		func(fs *flag.FlagSet) error {
+			return enterLibrary(fs.Lookup(workdirFlag).Value.String())
+		},
+	)
+}
+
+const workdirFlag = "workdir"
+
+// enterLibrary makes the library root the working directory, so every
+// relative path in paths resolves inside it.
+func enterLibrary(flagValue string) error {
+	root := flagValue
+	if root == "" {
+		root = os.Getenv(paths.HomeEnv)
+	}
+	if root == "" {
+		return nil
+	}
+	if err := os.Chdir(root); err != nil {
+		return fmt.Errorf("cannot use workdir %q: %w", root, err)
+	}
+	return nil
+}

@@ -11,6 +11,7 @@ import (
 	"yapl/internal/archive"
 	"yapl/internal/config"
 	"yapl/internal/fs"
+	"yapl/internal/paths"
 )
 
 // EnsureAll checks and acquires all configured dependencies.
@@ -20,14 +21,14 @@ func EnsureAll(appCfg config.App, forceUpgrade bool, globalCfg config.Global) er
 		return err
 	}
 	if appCfg.LaunchMethod == "umu" && !appCfg.UMUOptions.UseSystemBinary {
-		if err := ensure("umu-launcher", appCfg.UMUOptions.Version, globalCfg); err != nil {
+		if err := ensure(paths.KindUMU, appCfg.UMUOptions.Version, globalCfg); err != nil {
 			return err
 		}
 	}
-	if err := ensure("dxvk", appCfg.Dependencies.DXVKVersion, globalCfg); err != nil {
+	if err := ensure(paths.KindDXVK, appCfg.Dependencies.DXVKVersion, globalCfg); err != nil {
 		return err
 	}
-	if err := ensure("vkd3d", appCfg.Dependencies.VKD3DVersion, globalCfg); err != nil {
+	if err := ensure(paths.KindVKD3D, appCfg.Dependencies.VKD3DVersion, globalCfg); err != nil {
 		return err
 	}
 	return nil
@@ -44,7 +45,7 @@ func ensureProton(appCfg config.App, forceUpgrade bool, globalCfg config.Global)
 		return fmt.Errorf("proton version '%s' not defined in runner.json", appCfg.ProtonVersion)
 	}
 
-	protonPath := filepath.Join("proton", appCfg.ProtonVersion)
+	protonPath := paths.Proton(appCfg.ProtonVersion)
 	if vinfo.Path != "" {
 		if _, err := os.Stat(vinfo.Path); os.IsNotExist(err) {
 			return fmt.Errorf("custom proton path does not exist: %s", vinfo.Path)
@@ -75,7 +76,7 @@ func ensure(name, version string, globalCfg config.Global) error {
 	if version == "" {
 		return nil
 	}
-	depPath := filepath.Join("dependencies", name, version)
+	depPath := paths.Dependency(name, version)
 	if fs.DirExistsAndIsNotEmpty(depPath) {
 		return nil
 	}
@@ -101,10 +102,10 @@ func InstallCustomComponents(prefixPath string, deps config.AppDependencies) err
 	}
 	vkd3dList := []string{"d3d12.dll", "d3d12core.dll"}
 
-	if err := install("dxvk", deps.DXVKVersion, deps.DXVKInstallPath, prefixPath, dxvkMap[deps.DXVKDirectXVersion]); err != nil {
+	if err := install(paths.KindDXVK, deps.DXVKVersion, deps.DXVKInstallPath, prefixPath, dxvkMap[deps.DXVKDirectXVersion]); err != nil {
 		return err
 	}
-	if err := install("vkd3d", deps.VKD3DVersion, deps.VKD3DInstallPath, prefixPath, vkd3dList); err != nil {
+	if err := install(paths.KindVKD3D, deps.VKD3DVersion, deps.VKD3DInstallPath, prefixPath, vkd3dList); err != nil {
 		return err
 	}
 	return nil
@@ -115,7 +116,7 @@ func install(name, version, installPath, prefixPath string, dlls []string) error
 		return nil
 	}
 	fmt.Printf("-> Installing custom %s DLLs...\n", name)
-	sourceDir := filepath.Join("dependencies", name, version, "x64")
+	sourceDir := filepath.Join(paths.Dependency(name, version), "x64")
 	absPrefixPath, err := fs.GetAbsolutePath(prefixPath)
 	if err != nil {
 		return fmt.Errorf("could not resolve prefix path: %w", err)

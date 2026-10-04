@@ -1,6 +1,6 @@
 # PRD-26 - `--workdir` Flag for Non-CWD Deployments
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** Medium
 **Size:** M
 **Sprint:** Phase 1 — Out-of-the-box foundation
@@ -50,13 +50,13 @@ All of YAPL's path resolution is relative to the current working directory — `
 
 ## 4. Execution & Milestones
 
-- [ ] Write failing test: `TestMain_ChdirToWorkdirBeforeDispatch` (integration test using a temp dir)
-- [ ] Add `--workdir` flag to `main.go`
-- [ ] Call `os.Chdir` before command dispatch
-- [ ] Add error handling for invalid path
-- [ ] Update `README.md` with flag documentation and example
-- [ ] All tests pass
-- [ ] Mark Complete, move to `prds/done/`
+- [x] Write failing test: `TestMain_ChdirToWorkdirBeforeDispatch` (integration test using a temp dir)
+- [x] Add `--workdir` flag to `main.go`
+- [x] Call `os.Chdir` before command dispatch
+- [x] Add error handling for invalid path
+- [x] Update `README.md` with flag documentation and example
+- [x] All tests pass
+- [x] Mark Complete, move to `prds/done/`
 
 ## 5. Technical Notes
 

@@ -1,6 +1,6 @@
 # PRD-20 - Centralise Hardcoded Directory Path Constants
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** Medium
 **Size:** S
 **Sprint:** Phase 1 — Out-of-the-box foundation
@@ -57,12 +57,12 @@ When the directory layout needs to change (e.g., adding a `--workdir` flag, or r
 
 ## 4. Execution & Milestones
 
-- [ ] Write failing test: `TestProtonPath_ReturnsCorrectPath` (and similar for each path function)
-- [ ] Create `internal/fs/paths.go` with constants and path functions
-- [ ] Replace inline string literals in `dependency/`, `command/`, `app/`
-- [ ] `grep` confirms no remaining hardcoded `"proton"`, `"dependencies"`, `"games"`, `"apps"` literals in `internal/`
-- [ ] All tests pass
-- [ ] Mark Complete, move to `prds/done/`
+- [x] Write failing test: `TestProtonPath_ReturnsCorrectPath` (and similar for each path function)
+- [x] Create `internal/fs/paths.go` with constants and path functions
+- [x] Replace inline string literals in `dependency/`, `command/`, `app/`
+- [x] `grep` confirms no remaining hardcoded `"proton"`, `"dependencies"`, `"games"`, `"apps"` literals in `internal/`
+- [x] All tests pass
+- [x] Mark Complete, move to `prds/done/`
 
 ## 5. Technical Notes
 

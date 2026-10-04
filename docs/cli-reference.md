@@ -4,6 +4,14 @@
 
 Usage: `yapl [global flags] <command> [arguments] [flags]`
 
+## Global flags
+
+Place these before the command.
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--workdir <path>` | Library path to use instead of the current directory (default $YAPL_HOME). |  |
+
 ## `yapl help`
 
 Show help for YAPL or for one command

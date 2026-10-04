@@ -301,6 +301,22 @@ Some games need a helper process running before they start, such as a LAN relay 
 
 ---
 
+## Running from anywhere — `--workdir` and `YAPL_HOME`
+
+YAPL treats a folder as a *library*: `runner.json`, `proton/`, `dependencies/`, `games/` and `apps/` all live in it. By default the library is the current directory. To use one from anywhere (scripts, desktop launchers, systemd units), either pass `--workdir` **before** the command or set `YAPL_HOME`. The flag wins when both are set.
+
+```bash
+yapl --workdir /opt/lan-games run "Doom"
+YAPL_HOME=/opt/lan-games yapl list
+```
+
+```ini
+[Desktop Entry]
+Name=Doom
+Exec=yapl --workdir /opt/lan-games run Doom
+Type=Application
+```
+
 ## Flags
 
 Every flag belongs to one command, and each command only accepts its own flags. To see them:

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"yapl/internal/defaults"
+	"yapl/internal/paths"
 )
 
 // PackageEntry describes a single package available on the server.
@@ -52,8 +53,8 @@ var supportedExts = map[string]string{
 
 // subdirTypes maps subdirectory names to the package type they contain.
 var subdirTypes = map[string]string{
-	"games": "game",
-	"apps":  "app",
+	paths.GamesDir: paths.KindGame,
+	paths.AppsDir:  paths.KindApp,
 }
 
 // New creates a Server and performs an initial manifest scan.

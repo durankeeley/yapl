@@ -11,6 +11,7 @@ import (
 	"yapl/internal/client"
 	"yapl/internal/defaults"
 	"yapl/internal/kernel"
+	"yapl/internal/paths"
 )
 
 // Version is bumped whenever a store command changes behaviour.
@@ -93,7 +94,7 @@ func pull(ctx *kernel.Context, c *client.Client, name string) error {
 	}
 	fmt.Fprintf(ctx.Stdout, "-> Downloaded to %s\n", archivePath)
 
-	targetDir := entryType + "s"
+	targetDir := paths.TypeDir(entryType)
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return fmt.Errorf("create %s: %w", targetDir, err)
 	}

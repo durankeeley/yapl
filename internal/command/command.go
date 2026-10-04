@@ -14,6 +14,7 @@ import (
 
 	"yapl/internal/config"
 	"yapl/internal/fs"
+	"yapl/internal/paths"
 )
 
 // InitializePrefix creates and sets up a new Wine prefix.
@@ -280,7 +281,7 @@ func RunInContainer(prefixPath string, appCfg config.App, globalCfg config.Globa
 		return fmt.Errorf("could not resolve prefix path: %w", err)
 	}
 
-	runtimeDir := filepath.Join("dependencies", "runtime", appCfg.RuntimeVersion)
+	runtimeDir := paths.Runtime(appCfg.RuntimeVersion)
 	entryPointPath := filepath.Join(runtimeDir, "yapl-entry-point")
 	shimPath := filepath.Join(runtimeDir, "yapl-shim")
 	protonScriptPath, err := getProtonScriptPath(appCfg, globalCfg)
@@ -331,7 +332,7 @@ func RunWithUMU(prefixPath string, appCfg config.App, globalCfg config.Global, d
 		if !ok {
 			return fmt.Errorf("umu-launcher version '%s' not defined in runner.json", ver)
 		}
-		umuRunPath = filepath.Join("dependencies", "umu-launcher", ver, vinfo.BinPath, "umu-run")
+		umuRunPath = filepath.Join(paths.Dependency(paths.KindUMU, ver), vinfo.BinPath, "umu-run")
 	}
 
 	absPrefix, err := fs.GetAbsolutePath(prefixPath)
@@ -619,7 +620,7 @@ func getProtonPath(version string, vinfo config.VersionInfo) string {
 	if vinfo.Path != "" {
 		return vinfo.Path
 	}
-	return filepath.Join("proton", version)
+	return paths.Proton(version)
 }
 
 func getProtonScriptPath(appCfg config.App, globalCfg config.Global) (string, error) {

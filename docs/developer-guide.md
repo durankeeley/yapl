@@ -171,6 +171,7 @@ cmd/yapl/main.go ── registers ──► internal/kernel ◄── Module{Nam
 * **`internal/kernel`** owns argument parsing, `help`, `version` and dispatch. Each command gets its own `flag.FlagSet`, so flags are scoped to their command and may appear before or after positional arguments. Usage text, `yapl help` and `docs/cli-reference.md` are all generated from the command registrations.
 * **Modules** (`internal/modules/*`) are thin: they declare commands and flags, validate arguments, and call into the domain packages (`app`, `archive`, `client`, `server`, …). Each has `const Version`; bump it when the module's behaviour changes.
 * **`internal/defaults`** holds every shared tunable (ports, timeouts, intervals, default format and method). Don't write a port or timeout literal anywhere else.
+* **`internal/paths`** defines the library layout (`proton/`, `dependencies/<kind>/<version>`, `games/<name>/prefix`, `runner.json`, …) and the component kinds. Paths are relative to the library root; `--workdir`/`YAPL_HOME` change into that root before any command runs.
 * **`internal/version`** parses and orders versions (semantic, plus natural order for strings like `GE-Proton11-7`).
 
 ### `cmd/yapl/main.go`

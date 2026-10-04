@@ -12,6 +12,7 @@ import (
 	"yapl/internal/archive"
 	"yapl/internal/config"
 	"yapl/internal/defaults"
+	"yapl/internal/paths"
 )
 
 var httpClient = &http.Client{Timeout: defaults.DownloadTimeout}
@@ -31,7 +32,7 @@ func EnsureRuntime(appCfg config.App, globalCfg config.Global) error {
 		return fmt.Errorf("runtime version '%s' has no URL specified in runner.json", appCfg.RuntimeVersion)
 	}
 
-	runtimeDir := filepath.Join("dependencies", "runtime", appCfg.RuntimeVersion)
+	runtimeDir := paths.Runtime(appCfg.RuntimeVersion)
 	if err := os.MkdirAll(runtimeDir, 0755); err != nil {
 		return fmt.Errorf("could not create runtime directory: %w", err)
 	}

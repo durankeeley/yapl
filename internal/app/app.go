@@ -13,6 +13,7 @@ import (
 	"yapl/internal/defaults"
 	"yapl/internal/dependency"
 	"yapl/internal/fs"
+	"yapl/internal/paths"
 )
 
 // App holds the runtime state and configuration for a specific game or application.
@@ -30,7 +31,7 @@ type App struct {
 
 // New creates and initializes a new App instance.
 func New(appType, appName string, force, debug, steam bool, gc config.Global, ac config.App) *App {
-	appDir := filepath.Join(appType, appName)
+	appDir := paths.AppDir(appType, appName)
 	return &App{
 		Type:          appType,
 		Name:          appName,
@@ -40,7 +41,7 @@ func New(appType, appName string, force, debug, steam bool, gc config.Global, ac
 		GlobalConfig:  gc,
 		AppConfig:     ac,
 		AppDir:        appDir,
-		PrefixPath:    filepath.Join(appDir, "prefix"),
+		PrefixPath:    paths.Prefix(appDir),
 	}
 }
 
@@ -81,16 +82,16 @@ func (a *App) Setup() error {
 // Find searches games/ and apps/ for a named entry and returns its type ("games" or "apps").
 // It returns an error if the name is not found or exists in both directories.
 func Find(name string) (appType, appName string, err error) {
-	inGames := fileExistsAt(filepath.Join("games", name, "game.json"))
-	inApps := fileExistsAt(filepath.Join("apps", name, "app.json"))
+	inGames := fileExistsAt(filepath.Join(paths.GamesDir, name, paths.GameConfig))
+	inApps := fileExistsAt(filepath.Join(paths.AppsDir, name, paths.AppConfig))
 
 	switch {
 	case inGames && inApps:
 		return "", "", fmt.Errorf("'%s' exists in both games/ and apps/; specify type: 'setup game %s' or 'setup app %s'", name, name, name)
 	case inGames:
-		return "games", name, nil
+		return paths.GamesDir, name, nil
 	case inApps:
-		return "apps", name, nil
+		return paths.AppsDir, name, nil
 	default:
 		return "", "", fmt.Errorf("'%s' not found in games/ or apps/", name)
 	}
@@ -110,8 +111,8 @@ func ListAll(w io.Writer) error {
 		cfgName string
 		label   string
 	}{
-		{"games", "game.json", "game"},
-		{"apps", "app.json", "app"},
+		{paths.GamesDir, paths.GameConfig, paths.KindGame},
+		{paths.AppsDir, paths.AppConfig, paths.KindApp},
 	}
 
 	for _, d := range dirs {
@@ -147,7 +148,7 @@ func ListAll(w io.Writer) error {
 func (a *App) Info(w io.Writer) error {
 	absPrefix, _ := fs.GetAbsolutePath(a.PrefixPath)
 
-	protonPath := filepath.Join("proton", a.AppConfig.ProtonVersion)
+	protonPath := paths.Proton(a.AppConfig.ProtonVersion)
 	if vinfo, ok := a.GlobalConfig.ProtonVersions[a.AppConfig.ProtonVersion]; ok && vinfo.Path != "" {
 		protonPath = vinfo.Path
 	}
@@ -160,31 +161,28 @@ func (a *App) Info(w io.Writer) error {
 		prefixStatus = "✗ not initialised"
 	}
 
-	cfgFile := filepath.Join(a.AppDir, "game.json")
-	if a.Type == "apps" {
-		cfgFile = filepath.Join(a.AppDir, "app.json")
-	}
+	cfgFile := filepath.Join(a.AppDir, paths.DefaultConfigName(a.Type))
 
 	fmt.Fprintf(w, "Game:          %s\n", a.Name)
 	fmt.Fprintf(w, "Config file:   %s\n", cfgFile)
 	fmt.Fprintf(w, "Proton:        %-14s [%s]  %s\n", a.AppConfig.ProtonVersion, protonPath, protonStatus)
 
 	if v := a.AppConfig.Dependencies.DXVKVersion; v != "" {
-		p := filepath.Join("dependencies", "dxvk", v)
+		p := paths.Dependency(paths.KindDXVK, v)
 		fmt.Fprintf(w, "DXVK:          %-14s [%s]  %s\n", v, p, statusMark(fs.DirExistsAndIsNotEmpty(p)))
 	} else {
 		fmt.Fprintf(w, "DXVK:          (not set)\n")
 	}
 
 	if v := a.AppConfig.Dependencies.VKD3DVersion; v != "" {
-		p := filepath.Join("dependencies", "vkd3d", v)
+		p := paths.Dependency(paths.KindVKD3D, v)
 		fmt.Fprintf(w, "VKD3D:         %-14s [%s]  %s\n", v, p, statusMark(fs.DirExistsAndIsNotEmpty(p)))
 	} else {
 		fmt.Fprintf(w, "VKD3D:         (not set)\n")
 	}
 
 	if v := a.AppConfig.RuntimeVersion; v != "" {
-		p := filepath.Join("dependencies", "runtime", v)
+		p := paths.Runtime(v)
 		fmt.Fprintf(w, "Runtime:       %-14s [%s]  %s\n", v, p, statusMark(fs.DirExistsAndIsNotEmpty(p)))
 	} else {
 		fmt.Fprintf(w, "Runtime:       (not set)\n")
@@ -246,20 +244,20 @@ func (a *App) Package(format string, bundleDeps, yes bool) error {
 	}
 
 	// Copy Proton.
-	protonSrc := filepath.Join("proton", a.AppConfig.ProtonVersion)
+	protonSrc := paths.Proton(a.AppConfig.ProtonVersion)
 	if !fs.DirExistsAndIsNotEmpty(protonSrc) {
 		return fmt.Errorf("proton '%s' not downloaded; run 'setup' before bundling", a.AppConfig.ProtonVersion)
 	}
-	protonDst := filepath.Join(stagingDir, "_bundle", "proton", a.AppConfig.ProtonVersion)
+	protonDst := filepath.Join(stagingDir, paths.BundleDir, protonSrc)
 	if err := fs.CopyDir(protonSrc, protonDst); err != nil {
 		return fmt.Errorf("copy proton to bundle: %w", err)
 	}
 
 	// Copy DXVK if configured.
 	if v := a.AppConfig.Dependencies.DXVKVersion; v != "" {
-		src := filepath.Join("dependencies", "dxvk", v)
+		src := paths.Dependency(paths.KindDXVK, v)
 		if fs.DirExistsAndIsNotEmpty(src) {
-			if err := fs.CopyDir(src, filepath.Join(stagingDir, "_bundle", "dependencies", "dxvk", v)); err != nil {
+			if err := fs.CopyDir(src, filepath.Join(stagingDir, paths.BundleDir, src)); err != nil {
 				return fmt.Errorf("copy dxvk to bundle: %w", err)
 			}
 		}
@@ -267,9 +265,9 @@ func (a *App) Package(format string, bundleDeps, yes bool) error {
 
 	// Copy VKD3D if configured.
 	if v := a.AppConfig.Dependencies.VKD3DVersion; v != "" {
-		src := filepath.Join("dependencies", "vkd3d", v)
+		src := paths.Dependency(paths.KindVKD3D, v)
 		if fs.DirExistsAndIsNotEmpty(src) {
-			if err := fs.CopyDir(src, filepath.Join(stagingDir, "_bundle", "dependencies", "vkd3d", v)); err != nil {
+			if err := fs.CopyDir(src, filepath.Join(stagingDir, paths.BundleDir, src)); err != nil {
 				return fmt.Errorf("copy vkd3d to bundle: %w", err)
 			}
 		}
@@ -277,17 +275,17 @@ func (a *App) Package(format string, bundleDeps, yes bool) error {
 
 	// Copy runtime if configured.
 	if v := a.AppConfig.RuntimeVersion; v != "" {
-		src := filepath.Join("dependencies", "runtime", v)
+		src := paths.Runtime(v)
 		if fs.DirExistsAndIsNotEmpty(src) {
-			if err := fs.CopyDir(src, filepath.Join(stagingDir, "_bundle", "dependencies", "runtime", v)); err != nil {
+			if err := fs.CopyDir(src, filepath.Join(stagingDir, paths.BundleDir, src)); err != nil {
 				return fmt.Errorf("copy runtime to bundle: %w", err)
 			}
 		}
 	}
 
 	// Copy runner.json so the target machine knows which versions to reference.
-	if _, err := os.Stat("runner.json"); err == nil {
-		if err := fs.CopyFile("runner.json", filepath.Join(stagingDir, "_bundle", "runner.json")); err != nil {
+	if _, err := os.Stat(paths.RunnerConfig); err == nil {
+		if err := fs.CopyFile(paths.RunnerConfig, filepath.Join(stagingDir, paths.BundleDir, paths.RunnerConfig)); err != nil {
 			return fmt.Errorf("copy runner.json to bundle: %w", err)
 		}
 	}
@@ -297,17 +295,17 @@ func (a *App) Package(format string, bundleDeps, yes bool) error {
 
 func bundleSize(a *App) (int64, error) {
 	var total int64
-	paths := []string{a.AppDir, filepath.Join("proton", a.AppConfig.ProtonVersion)}
+	dirs := []string{a.AppDir, paths.Proton(a.AppConfig.ProtonVersion)}
 	if v := a.AppConfig.Dependencies.DXVKVersion; v != "" {
-		paths = append(paths, filepath.Join("dependencies", "dxvk", v))
+		dirs = append(dirs, paths.Dependency(paths.KindDXVK, v))
 	}
 	if v := a.AppConfig.Dependencies.VKD3DVersion; v != "" {
-		paths = append(paths, filepath.Join("dependencies", "vkd3d", v))
+		dirs = append(dirs, paths.Dependency(paths.KindVKD3D, v))
 	}
 	if v := a.AppConfig.RuntimeVersion; v != "" {
-		paths = append(paths, filepath.Join("dependencies", "runtime", v))
+		dirs = append(dirs, paths.Runtime(v))
 	}
-	for _, p := range paths {
+	for _, p := range dirs {
 		_ = filepath.Walk(p, func(_ string, info os.FileInfo, err error) error {
 			if err == nil && !info.IsDir() {
 				total += info.Size()
@@ -329,25 +327,25 @@ type CleanTargets struct {
 // When yes is false the user is prompted to confirm before any deletion occurs.
 // Warnings about shared Proton versions are written to w.
 func (a *App) Clean(targets CleanTargets, yes bool, w io.Writer) error {
-	var paths []string
+	var targetPaths []string
 
 	if targets.Prefix {
-		paths = append(paths, a.PrefixPath)
+		targetPaths = append(targetPaths, a.PrefixPath)
 	}
 	if targets.Proton && a.AppConfig.ProtonVersion != "" {
-		protonDir := filepath.Join("proton", a.AppConfig.ProtonVersion)
-		paths = append(paths, protonDir)
+		protonDir := paths.Proton(a.AppConfig.ProtonVersion)
+		targetPaths = append(targetPaths, protonDir)
 	}
 	if targets.Deps {
 		if v := a.AppConfig.Dependencies.DXVKVersion; v != "" {
-			paths = append(paths, filepath.Join("dependencies", "dxvk", v))
+			targetPaths = append(targetPaths, paths.Dependency(paths.KindDXVK, v))
 		}
 		if v := a.AppConfig.Dependencies.VKD3DVersion; v != "" {
-			paths = append(paths, filepath.Join("dependencies", "vkd3d", v))
+			targetPaths = append(targetPaths, paths.Dependency(paths.KindVKD3D, v))
 		}
 	}
 
-	if len(paths) == 0 {
+	if len(targetPaths) == 0 {
 		fmt.Fprintln(w, "-> Nothing to clean.")
 		return nil
 	}
@@ -358,7 +356,7 @@ func (a *App) Clean(targets CleanTargets, yes bool, w io.Writer) error {
 
 	if !yes {
 		fmt.Fprintln(w, "The following paths will be deleted:")
-		for _, p := range paths {
+		for _, p := range targetPaths {
 			fmt.Fprintf(w, "  %s\n", p)
 		}
 		fmt.Print("Delete the above? [y/N]: ")
@@ -369,7 +367,7 @@ func (a *App) Clean(targets CleanTargets, yes bool, w io.Writer) error {
 		}
 	}
 
-	for _, p := range paths {
+	for _, p := range targetPaths {
 		if err := os.RemoveAll(p); err != nil {
 			return fmt.Errorf("remove %s: %w", p, err)
 		}
@@ -384,8 +382,8 @@ func (a *App) warnIfProtonShared(w io.Writer) {
 		dir     string
 		cfgName string
 	}{
-		{"games", "game.json"},
-		{"apps", "app.json"},
+		{paths.GamesDir, paths.GameConfig},
+		{paths.AppsDir, paths.AppConfig},
 	}
 	for _, d := range dirs {
 		entries, err := os.ReadDir(d.dir)

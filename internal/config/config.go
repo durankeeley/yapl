@@ -10,6 +10,7 @@ import (
 
 	"yapl/internal/defaults"
 	"yapl/internal/fs"
+	"yapl/internal/paths"
 )
 
 // --- Configuration Structs ---
@@ -115,18 +116,14 @@ func LoadOrCreateGlobal(path string) (Global, error) {
 }
 
 func LoadOrCreateApp(appType, appName, configName string, globalCfg Global, defaultMethod string) (App, error) {
-	appDir := filepath.Join(appType, appName)
+	appDir := paths.AppDir(appType, appName)
 
 	var configFileName string
 	if configName != "" {
 		configFileName = configName
 	} else {
 		// No custom name, use the default
-		if appType == "games" {
-			configFileName = "game.json"
-		} else {
-			configFileName = "app.json"
-		}
+		configFileName = paths.DefaultConfigName(appType)
 	}
 
 	configPath := filepath.Join(appDir, configFileName)
@@ -193,15 +190,15 @@ func SaveGlobal(path string, g Global) error {
 func MergeGlobal(local, bundled Global) (Global, []string) {
 	var added []string
 	merged := Global{
-		ProtonVersions:     mergeVersions(local.ProtonVersions, bundled.ProtonVersions, "proton", &added),
-		RuntimeVersions:    mergeVersions(local.RuntimeVersions, bundled.RuntimeVersions, "runtime", &added),
+		ProtonVersions:     mergeVersions(local.ProtonVersions, bundled.ProtonVersions, paths.KindProton, &added),
+		RuntimeVersions:    mergeVersions(local.RuntimeVersions, bundled.RuntimeVersions, paths.KindRuntime, &added),
 		DependencyVersions: map[string]map[string]VersionInfo{},
 	}
 	for kind, versions := range local.DependencyVersions {
 		merged.DependencyVersions[kind] = versions
 	}
 	for kind, versions := range bundled.DependencyVersions {
-		merged.DependencyVersions[kind] = mergeVersions(local.DependencyVersions[kind], versions, "dependencies/"+kind, &added)
+		merged.DependencyVersions[kind] = mergeVersions(local.DependencyVersions[kind], versions, paths.DependenciesDir+"/"+kind, &added)
 	}
 	sort.Strings(added)
 	return merged, added

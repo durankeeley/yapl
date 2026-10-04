@@ -17,6 +17,7 @@ import (
 	"yapl/internal/config"
 	"yapl/internal/defaults"
 	"yapl/internal/fs"
+	"yapl/internal/paths"
 )
 
 var httpClient = &http.Client{Timeout: defaults.DownloadTimeout}
@@ -126,7 +127,7 @@ func PackageFromDir(dir, archiveName, format string) error {
 // installBundledDeps processes a _bundle/ directory that may have been extracted
 // into targetDir, installing its contents into the deployment root.
 func installBundledDeps(targetDir string) error {
-	bundleDir := filepath.Join(targetDir, "_bundle")
+	bundleDir := filepath.Join(targetDir, paths.BundleDir)
 	if _, err := os.Stat(bundleDir); os.IsNotExist(err) {
 		return nil
 	}
@@ -144,23 +145,23 @@ func installBundledDeps(targetDir string) error {
 	}
 
 	// Install proton versions.
-	protonSrc := filepath.Join(bundleDir, "proton")
+	protonSrc := filepath.Join(bundleDir, paths.ProtonDir)
 	if entries, err := os.ReadDir(protonSrc); err == nil {
 		for _, e := range entries {
-			if err := installDir(filepath.Join(protonSrc, e.Name()), filepath.Join("proton", e.Name())); err != nil {
+			if err := installDir(filepath.Join(protonSrc, e.Name()), paths.Proton(e.Name())); err != nil {
 				return fmt.Errorf("install bundled proton: %w", err)
 			}
 		}
 	}
 
 	// Install dependencies (dxvk, vkd3d, runtime, etc.).
-	depsSrc := filepath.Join(bundleDir, "dependencies")
+	depsSrc := filepath.Join(bundleDir, paths.DependenciesDir)
 	if depTypes, err := os.ReadDir(depsSrc); err == nil {
 		for _, depType := range depTypes {
 			versions, _ := os.ReadDir(filepath.Join(depsSrc, depType.Name()))
 			for _, ver := range versions {
 				src := filepath.Join(depsSrc, depType.Name(), ver.Name())
-				dst := filepath.Join("dependencies", depType.Name(), ver.Name())
+				dst := paths.Dependency(depType.Name(), ver.Name())
 				if err := installDir(src, dst); err != nil {
 					return fmt.Errorf("install bundled %s: %w", depType.Name(), err)
 				}
@@ -168,9 +169,9 @@ func installBundledDeps(targetDir string) error {
 		}
 	}
 
-	bundledRunner := filepath.Join(bundleDir, "runner.json")
+	bundledRunner := filepath.Join(bundleDir, paths.RunnerConfig)
 	if _, err := os.Stat(bundledRunner); err == nil {
-		if err := mergeBundledRunner(bundledRunner, "runner.json"); err != nil {
+		if err := mergeBundledRunner(bundledRunner, paths.RunnerConfig); err != nil {
 			return err
 		}
 	}
