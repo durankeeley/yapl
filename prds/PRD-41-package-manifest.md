@@ -1,6 +1,6 @@
 # PRD-41 - Package Manifest: Metadata, Versions, Checksums, Components
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** High
 **Size:** M
 **Sprint:** Phase 2 — Registry server

@@ -16,16 +16,16 @@ Phases supersede the sprint ordering below for anything they list. Within a phas
 | PRD-36 | Fix `clean` flag parsing | ✅ Done |
 | PRD-37 | Merge bundled `runner.json` entries on unpackage | ✅ Done |
 
-### Phase 1 — Out-of-the-box foundation
-| PRD | Title | Size |
-|-----|-------|------|
-| PRD-38 | Microkernel: versioned modules, scoped flags, generated help, `yapl version` | L |
-| PRD-20 | Centralise directory paths (`internal/paths`) | S |
-| PRD-26 | `--workdir` / `YAPL_HOME` | S |
-| PRD-19 | DXVK DirectX version validation | S |
-| PRD-39 | Working defaults catalog (pinned GE-Proton, DXVK, VKD3D, sniper) | M |
-| PRD-9  | Download progress (`internal/progress`) | S |
-| PRD-40 | `yapl install` from installer or folder, with executable detection | M |
+### Phase 1 — Out-of-the-box foundation ✅ Complete
+| PRD | Title | Size | Status |
+|-----|-------|------|--------|
+| PRD-38 | Microkernel: versioned modules, scoped flags, generated help, `yapl version` | L | ✅ Done |
+| PRD-20 | Centralise directory paths (`internal/paths`) | S | ✅ Done |
+| PRD-26 | `--workdir` / `YAPL_HOME` | S | ✅ Done |
+| PRD-19 | DXVK DirectX version validation | S | ✅ Done |
+| PRD-39 | Working defaults catalog (pinned GE-Proton, DXVK, VKD3D, sniper) | M | ✅ Done |
+| PRD-9  | Download progress (`internal/progress`) | S | ✅ Done |
+| PRD-40 | `yapl install` from installer or folder, with executable detection | M | ✅ Done |
 
 ### Phase 2 — Registry server ("Docker Hub")
 | PRD | Title | Size |
