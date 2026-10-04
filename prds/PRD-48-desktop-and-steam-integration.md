@@ -1,6 +1,6 @@
 # PRD-48 - Desktop, Steam and Autostart Integration (`yapl export`)
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** Medium
 **Size:** M
 **Sprint:** Phase 3 — Console client
@@ -30,7 +30,9 @@ yapl export autostart          # start `yapl console` on login
 * Writes `$XDG_DATA_HOME/applications/yapl-<slug>.desktop` (default `~/.local/share/applications`). Icon = game cover if present. `--output-dir` overrides for packaging/testing.
 
 ### Steam (`internal/integration/steam`)
-* Binary VDF reader/writer for `userdata/<id>/config/shortcuts.vdf` (types: map 0x00, string 0x01, int32 0x02, end 0x08).
+* Binary VDF reader/writer for `userdata/<id>/config/shortcuts.vdf` (types: map 0x00, string 0x01, int32 0x02, float32 0x03, uint64 0x07, end 0x08). Numeric values are kept as raw bytes so files round-trip byte-exactly.
+* Every Steam user under `userdata/` gets the shortcuts (`--steam-user <id>` limits it to one).
+* Lives in its own versioned module, `internal/modules/integration`.
 * Merge: existing shortcuts are preserved; a YAPL shortcut is matched by its `Exe`+`LaunchOptions` and updated in place, not duplicated.
 * Shortcut app ID = `crc32(exe + name) | 0x80000000`; cover copied to `config/grid/<appid>p.<ext>` so Big Picture shows art.
 * Refuses when Steam is running (it rewrites the file on exit), unless `--force`.
