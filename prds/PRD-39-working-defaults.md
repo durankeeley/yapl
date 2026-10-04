@@ -1,6 +1,6 @@
 # PRD-39 - Working Defaults Out of the Box
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** High
 **Size:** M
 **Sprint:** Phase 1 — Out-of-the-box foundation
