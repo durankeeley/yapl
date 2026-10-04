@@ -1,4 +1,54 @@
-# YAPL Sprint Plan
+# YAPL Roadmap and Sprint Plan
+
+## Product goal
+
+A local "Docker Hub" for Windows games on Linux: the operator installs and packages a game once and pushes it to a LAN server. Every other machine pulls it with one button from a console-style, gamepad-driven launcher.
+
+## Phases (current plan, 2026-10-04)
+
+Phases supersede the sprint ordering below for anything they list. Within a phase, PRDs are worked top to bottom.
+
+### Phase 0 — Stabilise ✅ Complete
+| PRD | Title | Status |
+|-----|-------|--------|
+| PRD-33 | Background services | ✅ Done |
+| PRD-8  | Config validation (cherry-picked from the prd-8 worktree) | ✅ Done |
+| PRD-36 | Fix `clean` flag parsing | ✅ Done |
+| PRD-37 | Merge bundled `runner.json` entries on unpackage | ✅ Done |
+
+### Phase 1 — Out-of-the-box foundation
+| PRD | Title | Size |
+|-----|-------|------|
+| PRD-38 | Microkernel: versioned modules, scoped flags, generated help, `yapl version` | L |
+| PRD-20 | Centralise directory paths (`internal/paths`) | S |
+| PRD-26 | `--workdir` / `YAPL_HOME` | S |
+| PRD-19 | DXVK DirectX version validation | S |
+| PRD-39 | Working defaults catalog (pinned GE-Proton, DXVK, VKD3D, sniper) | M |
+| PRD-9  | Download progress (`internal/progress`) | S |
+| PRD-40 | `yapl install` from installer or folder, with executable detection | M |
+
+### Phase 2 — Registry server ("Docker Hub")
+| PRD | Title | Size |
+|-----|-------|------|
+| PRD-41 | Package manifest: metadata, versions, checksums, components | M |
+| PRD-42 | Registry API v1 and versioned storage | L |
+| PRD-43 | Shared component layers and `yapl push` | L |
+| PRD-44 | Pull v2: tags, verified streaming install, components, remembered server | L |
+| PRD-45 | `yapl upgrade`: per-part upgrades (games keep saves, self, catalog) | L |
+
+### Phase 3 — Console client
+| PRD | Title | Size |
+|-----|-------|------|
+| PRD-46 | Console service: local API for library, store, jobs, sessions | L |
+| PRD-47 | `yapl console`: gamepad-first full-screen launcher | L |
+| PRD-48 | `yapl export`: desktop, Steam and autostart integration | M |
+
+### Backlog (not in a phase)
+PRD-11 (dependency upgrade flags, partly superseded by PRD-45), PRD-12 (`--no-prefix`), PRD-23/25/30 (wine builder ecosystem), PRD-35 (display resolution).
+
+---
+
+## Original sprint plan
 
 Sprints are ordered by dependency and impact. Earlier sprints produce a cleaner, more reliable codebase that later sprints build on. Within each sprint, PRDs can be worked in parallel or in the order listed.
 

@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** Medium
 **Size:** S
-**Sprint:** 3 — Validation & Deployment Flexibility
+**Sprint:** Phase 1 — Out-of-the-box foundation
 **Tags:** `bugfix`, `config`, `validation`, `dxvk`
 **Created:** 2026-04-27
 

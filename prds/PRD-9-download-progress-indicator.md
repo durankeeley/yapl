@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** Medium
 **Size:** M
-**Sprint:** 4 — Dependency & Package UX
+**Sprint:** Phase 1 — Out-of-the-box foundation
 **Tags:** `feature`, `ux`, `download`, `archive`
 **Created:** 2026-04-27
 
@@ -39,6 +39,12 @@ Proton builds and the Steam Linux Runtime are multi-gigabyte downloads. During `
 ### Extraction phase
 * **Behavior/Rule:** After download, print `-> Extracting...` as a single line. No per-file progress for extraction (tar entry counts are not predictable for large archives).
 * **Specifics:** The existing `ar.Extract` call is unchanged; only the download phase gets a progress indicator.
+
+### Phase 1 amendments (2026-10-04)
+* Implement as `internal/progress`: a `Reader` wrapping `io.Reader` that reports to a `func(Update)` callback, plus a `TerminalPrinter` callback. The console (PRD-46) reuses the same callback for install job progress.
+* TTY detection uses only the stdlib: `os.Stdout.Stat()` and `ModeCharDevice`. No `golang.org/x/term`.
+* Thresholds (256 KB, 10 %, 100 MB) are named constants in `internal/progress`.
+* Covers both `archive` HTTP downloads and `client` package downloads, replacing the client's hand-rolled loop.
 
 ## 4. Execution & Milestones
 

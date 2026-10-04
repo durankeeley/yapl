@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** Medium
 **Size:** M
-**Sprint:** 3 — Validation & Deployment Flexibility
+**Sprint:** Phase 1 — Out-of-the-box foundation
 **Tags:** `feature`, `cli`, `portability`
 **Created:** 2026-04-27
 
@@ -43,6 +43,10 @@ All of YAPL's path resolution is relative to the current working directory — `
   [Desktop Entry]
   Exec=yapl --workdir /opt/lan-games run Doom
   ```
+
+### Phase 1 amendments (2026-10-04)
+* `--workdir` is a kernel-level global flag placed before the verb (PRD-38).
+* `YAPL_HOME` environment variable is the fallback when the flag is absent, so desktop entries and the console can point at a library without flags. Order: `--workdir` > `YAPL_HOME` > current directory.
 
 ## 4. Execution & Milestones
 

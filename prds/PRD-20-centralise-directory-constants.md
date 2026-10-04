@@ -3,7 +3,7 @@
 **Status:** `[ ] Pending`
 **Priority:** Medium
 **Size:** S
-**Sprint:** 3 — Validation & Deployment Flexibility
+**Sprint:** Phase 1 — Out-of-the-box foundation
 **Tags:** `refactor`, `maintainability`, `config`
 **Created:** 2026-04-27
 
@@ -51,6 +51,9 @@ When the directory layout needs to change (e.g., adding a `--workdir` flag, or r
 
 ### No behaviour change
 * **Behavior/Rule:** This is a pure refactor. No new behaviour, no new config options. All existing tests must pass unchanged.
+
+### Phase 1 amendments (2026-10-04)
+* Use a new `internal/paths` package rather than `internal/fs/paths.go`: the kernel, catalog and registry modules need it too, and `paths` has no imports beyond `path/filepath`, so there is no cycle risk.
 
 ## 4. Execution & Milestones
 
