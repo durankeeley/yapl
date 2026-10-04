@@ -43,6 +43,28 @@ Phases supersede the sprint ordering below for anything they list. Within a phas
 | PRD-47 | `yapl console`: gamepad-first full-screen launcher | L | ✅ Done |
 | PRD-48 | `yapl export`: desktop, Steam and autostart integration | M | ✅ Done |
 
+### Phase 3 follow-up ✅ Complete
+| PRD | Title | Status |
+|-----|-------|--------|
+| PRD-49 | Coverage pass (+ zstd checksum race fix, race-enabled CI task) | ✅ Done |
+
+### Phase 4 — proposed (not started)
+Ordered by impact on the "set up once, ten machines pull and play" goal.
+
+| # | Proposal | Why |
+|---|----------|-----|
+| 1 | Real-hardware validation: two or more LAN machines, real GE-Proton/sniper games, a physical controller, a Steam Deck | Everything so far is tested with fakes and headless browsers; real Wine/Proton/gamepad behaviour needs a pass |
+| 2 | Guide-button overlay: a small evdev listener so Guide+Start quits the running game back to the console | The browser loses gamepad focus while a game is full-screen, so the console can't hear the controller mid-game |
+| 3 | Gamescope session + PRD-35 display management | True boot-to-console on bare machines; fixed resolutions for old games |
+| 4 | Peer-to-peer LAN distribution (machines that already pulled serve chunks to others) | Ten machines pulling a 20 GB game at once saturate one server |
+| 5 | Content-addressed chunk store for delta upgrades | A small patch to a large game currently re-downloads the whole archive |
+| 6 | Registry admin: `yapl registry rm/prune`, unused-component garbage collection, a read-only web catalog | Components and old versions accumulate forever |
+| 7 | Roles and transport security: read/push tokens, TLS with pinned self-signed certs | Today it's one shared password over plain HTTP |
+| 8 | Save sync: push `preserve` paths to the server per player | Players can sit at any machine and keep their progress |
+| 9 | Console features: search, recently played, launch profiles (`--config` variants as tiles), on-screen keyboard, sounds/themes | Couch polish |
+| 10 | `yapl doctor`: Vulkan, drivers, 32-bit libs, controllers, disk space | Out-of-box readiness check before a LAN party |
+| 11 | Distribution: AppImage/AUR/Flatpak, a systemd unit for `yapl serve`, release tags and changelog; merge `feature/yapl-v2` into `main` and stop committing the `yapl` binary | Getting YAPL onto machines is still manual |
+
 ### Backlog (not in a phase)
 PRD-11 (dependency upgrade flags, partly superseded by PRD-45), PRD-12 (`--no-prefix`), PRD-23/25/30 (wine builder ecosystem), PRD-35 (display resolution).
 
