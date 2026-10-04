@@ -202,3 +202,22 @@ func (c *Client) DownloadBinary(dest string, report progress.Func) error {
 
 // executableMode is applied to a downloaded yapl binary.
 const executableMode = 0755
+
+// OpenCover starts downloading a package version's cover image and returns
+// it with its content type.
+func (c *Client) OpenCover(name, version string) (io.ReadCloser, string, error) {
+	req, err := http.NewRequest(http.MethodGet, c.cfg.Server+packagePath(name, version)+"/cover", nil)
+	if err != nil {
+		return nil, "", err
+	}
+	c.applyAuth(req)
+	resp, err := c.metadataClient.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close()
+		return nil, "", serverError(resp)
+	}
+	return resp.Body, resp.Header.Get("Content-Type"), nil
+}

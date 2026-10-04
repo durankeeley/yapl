@@ -272,6 +272,32 @@ Here's what happens when you type `./yapl pull "Doom:1.2.0"`:
 * **`upgrade.Self`** refuses another platform (`/v1/info.platform`) and uses `NewerBinary`: newer in at least one part (kernel or module), older in none. The download is verified against `X-Yapl-SHA256` before it is renamed over `os.Executable()`.
 * **`upgrade.Catalog`** merges `catalog.Default()` into runner.json and adopts its defaults and `catalog_version`.
 
+## The console service (`internal/console`)
+
+The backend of `yapl console` is a loopback-only JSON API built from four parts, each tested on its own:
+
+| Part | File | Responsibility |
+|---|---|---|
+| Library | `library.go` | `ListLibrary`/`FindGame`/`Uninstall` over `games/` and `apps/`: title, version, cover, readiness (an executable other than the placeholder) |
+| Registry | `registry.go` | `Registry` interface; `NewRegistry(client)` adapts the client and reuses `pull.Pull`/`upgrade.Game`. Tests use an in-memory fake. |
+| Jobs | `jobs.go` | Serial queue of installs/upgrades with live progress (`progress.Update` → `Job.Stage/Done/Total`). One active job per game; finished jobs kept for `DefaultJobRetention`. Serial on purpose: pulls share `runner.json`. |
+| Sessions | `sessions.go` | One running game at a time, launched through a `Launcher` (default: `yapl --workdir <library> run <name>` as a child process) in its own process group, logged to `games/<name>/last-run.log`. `Stop` sends SIGTERM to the group, then SIGKILL after `DefaultStopGrace`. |
+
+`service.go` exposes them:
+
+| Method | Path |
+|---|---|
+| GET | `/api/system` |
+| GET | `/api/library`, `/api/library/{name}`, `/api/library/{name}/cover` |
+| POST | `/api/library/{name}/launch`, `/api/library/{name}/upgrade` |
+| DELETE | `/api/library/{name}?confirm={name}` |
+| GET | `/api/store`, `/api/store/{name}/cover` |
+| POST | `/api/store/{name}/install` |
+| GET | `/api/jobs`, `/api/jobs/{id}` |
+| GET / POST | `/api/session`, `/api/session/stop` |
+
+Browser safety: a `guard` middleware rejects any `Host` that isn't loopback (DNS rebinding) and any POST/DELETE without the `X-Yapl-Console` header (cross-site requests can't add it without a CORS preflight, which is never granted).
+
 ## How to add a new command
 
 1. Pick the module the command belongs to (or create `internal/modules/<name>` with `const Version` and a `Module` type, and register it in `cmd/yapl/main.go`).

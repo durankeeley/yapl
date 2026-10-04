@@ -118,3 +118,24 @@ func TestServerAddress(t *testing.T) {
 		}
 	})
 }
+
+func TestOpenCover(t *testing.T) {
+	t.Run("given a package with a cover when it is opened then the image and its type are returned", func(t *testing.T) {
+		c, st := registry(t, true)
+		u, _ := st.NewUpload()
+		u.WriteArchive(strings.NewReader("a"))
+		u.WriteCover(".png", strings.NewReader("png"))
+		sum := sha256.Sum256([]byte("a"))
+		u.CommitPackage("Doom", "1.0.0", manifest.Manifest{SchemaVersion: 1, Name: "Doom", Type: "game", Metadata: manifest.Metadata{Title: "Doom", Version: "1.0.0"},
+			Archive: manifest.Archive{File: "Doom.tar.gz", Format: "gz", SHA256: hex.EncodeToString(sum[:]), SizeBytes: 1}})
+		body, contentType, err := c.OpenCover("Doom", "latest")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer body.Close()
+		data, _ := io.ReadAll(body)
+		if string(data) != "png" || contentType != "image/png" {
+			t.Fatalf("data %q type %q", data, contentType)
+		}
+	})
+}

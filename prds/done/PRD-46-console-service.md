@@ -1,6 +1,6 @@
 # PRD-46 - Console Service: Local API for Library, Store, Jobs and Sessions
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** L
 **Sprint:** Phase 3 — Console client
@@ -50,10 +50,10 @@
 
 ## 4. Execution & Milestones
 
-- [ ] Library service tests on `t.TempDir()` libraries.
-- [ ] Jobs tests (progress, failure, retention) with a fake installer.
-- [ ] Sessions tests with a fake executable script (start, status, stop kills group, exit recorded).
-- [ ] HTTP handler tests via `httptest` for every route.
+- [x] Library service tests on `t.TempDir()` libraries.
+- [x] Jobs tests (progress, failure, retention) with a fake installer.
+- [x] Sessions tests with a fake executable script (start, status, stop kills group, exit recorded).
+- [x] HTTP handler tests via `httptest` for every route.
 
 ### Acceptance scenarios
 * **Given** two installed games, one with `installed.json` version 1.0.0 **and** the server offering 1.1.0 **when** I GET `/api/store` **then** that game is marked `upgradable`.
