@@ -67,6 +67,33 @@ yapl setup game "Need for Speed Most Wanted"
 yapl setup app "Notepad++" --method direct
 ```
 
+## `yapl install`
+
+Install a game from an installer or a folder and detect its executable
+
+```
+yapl install <game|app> <name> (--installer <file> | --from <dir>) [flags]
+```
+
+Sets the game up if needed, then runs the installer inside the prefix or copies a portable game folder to drive_c/Games/<name>. The new executable that best matches the name is written to the config, unless the config already names a custom one.
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--config <file>` | Config file name inside the game directory (default game.json or app.json). |  |
+| `--debug` | Enable verbose Proton and Wine logging. |  |
+| `--executable <path>` | Executable path relative to the prefix; skips detection. |  |
+| `--from <directory>` | Portable game directory to copy into the prefix. |  |
+| `--installer <file>` | Windows installer file to run inside the prefix. |  |
+| `--method <method>` | Launch method for a newly created config: direct, container, umu. |  |
+| `--steam` | Run as a Steam client prefix, ignoring the configured executable (container method only). |  |
+| `--upgrade-proton` | Force a fresh download of the configured Proton build. |  |
+
+```bash
+yapl install game "Doom" --installer ~/Downloads/setup_doom.exe
+yapl install game "Half-Life" --from /mnt/cdrom/Half-Life
+yapl install game "Half-Life" --from ./hl --executable drive_c/Games/Half-Life/hl.exe
+```
+
 ## `yapl run`
 
 Launch a game or app

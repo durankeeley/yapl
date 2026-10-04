@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -19,7 +20,7 @@ import (
 )
 
 // Version is bumped whenever a lifecycle command changes behaviour.
-const Version = "1.0.0"
+const Version = "1.1.0"
 
 // Module registers the lifecycle commands with the kernel.
 type Module struct{}
@@ -30,6 +31,7 @@ func (Module) Version() string { return Version }
 func (Module) Commands() []kernel.Command {
 	return []kernel.Command{
 		setupCommand(),
+		installCommand(),
 		runCommand(),
 		packageCommand(),
 		unpackageCommand(),
@@ -62,24 +64,61 @@ func setupCommand() kernel.Command {
 			fs.String("method", "", "Launch `method` for a newly created config: "+strings.Join(defaults.LaunchMethods, ", ")+".")
 		},
 		Run: func(ctx *kernel.Context) error {
-			kind, name := ctx.Arg(0), ctx.Arg(1)
-			if kind != paths.KindGame && kind != paths.KindApp {
-				return kernel.UsageError("the first argument must be game or app")
-			}
-			if name == "" {
-				return kernel.UsageError("a name is required")
-			}
-			method := ctx.String("method")
-			if method != "" && !slices.Contains(defaults.LaunchMethods, method) {
-				return kernel.UsageError("invalid --method %q: use one of %s", method, strings.Join(defaults.LaunchMethods, ", "))
-			}
-			a, err := loadApp(ctx, paths.TypeDir(kind), name, method)
+			a, err := newApp(ctx, ctx.Arg(0), ctx.Arg(1))
 			if err != nil {
 				return err
 			}
 			return a.Setup()
 		},
 	}
+}
+
+func installCommand() kernel.Command {
+	return kernel.Command{
+		Verb:        "install",
+		Usage:       "install <game|app> <name> (--installer <file> | --from <dir>) [flags]",
+		Summary:     "Install a game from an installer or a folder and detect its executable",
+		Description: "Sets the game up if needed, then runs the installer inside the prefix or copies a portable game folder to drive_c/Games/<name>. The new executable that best matches the name is written to the config, unless the config already names a custom one.",
+		Examples: []string{
+			`yapl install game "Doom" --installer ~/Downloads/setup_doom.exe`,
+			`yapl install game "Half-Life" --from /mnt/cdrom/Half-Life`,
+			`yapl install game "Half-Life" --from ./hl --executable drive_c/Games/Half-Life/hl.exe`,
+		},
+		Flags: func(fs *flag.FlagSet) {
+			launchFlags(fs)
+			fs.String("method", "", "Launch `method` for a newly created config: "+strings.Join(defaults.LaunchMethods, ", ")+".")
+			fs.String("installer", "", "Windows installer `file` to run inside the prefix.")
+			fs.String("from", "", "Portable game `directory` to copy into the prefix.")
+			fs.String("executable", "", "Executable `path` relative to the prefix; skips detection.")
+		},
+		Run: func(ctx *kernel.Context) error {
+			opts := app.InstallOptions{Installer: ctx.String("installer"), From: ctx.String("from"), Executable: ctx.String("executable")}
+			if (opts.Installer == "") == (opts.From == "") {
+				return kernel.UsageError("pass exactly one of --installer or --from")
+			}
+			a, err := newApp(ctx, ctx.Arg(0), ctx.Arg(1))
+			if err != nil {
+				return err
+			}
+			return a.Install(opts, ctx.Stdout)
+		},
+	}
+}
+
+// newApp validates "<game|app> <name>" plus --method and loads or creates
+// the config.
+func newApp(ctx *kernel.Context, kind, name string) (*app.App, error) {
+	if kind != paths.KindGame && kind != paths.KindApp {
+		return nil, kernel.UsageError("the first argument must be game or app")
+	}
+	if name == "" {
+		return nil, kernel.UsageError("a name is required")
+	}
+	method := ctx.String("method")
+	if method != "" && !slices.Contains(defaults.LaunchMethods, method) {
+		return nil, kernel.UsageError("invalid --method %q: use one of %s", method, strings.Join(defaults.LaunchMethods, ", "))
+	}
+	return loadApp(ctx, paths.TypeDir(kind), name, method)
 }
 
 func runCommand() kernel.Command {
@@ -232,5 +271,9 @@ func loadApp(ctx *kernel.Context, appType, name, method string) (*app.App, error
 	if err != nil {
 		return nil, fmt.Errorf("could not load or create app config: %w", err)
 	}
-	return app.New(appType, name, ctx.Bool("upgrade-proton"), ctx.Bool("debug"), ctx.Bool("steam"), globalCfg, appCfg), nil
+	a := app.New(appType, name, ctx.Bool("upgrade-proton"), ctx.Bool("debug"), ctx.Bool("steam"), globalCfg, appCfg)
+	if custom := ctx.String("config"); custom != "" {
+		a.ConfigFile = filepath.Join(a.AppDir, custom)
+	}
+	return a, nil
 }

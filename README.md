@@ -38,9 +38,25 @@ On a fresh library this works without editing anything. YAPL creates:
 
 It then downloads the components and creates the Wine prefix at `games/Game/prefix/`.
 
-### 2\. Install the game into the prefix
+### 2\. Install the game
 
-Install the game into the prefix (the first `setup` opens Explorer for this), then set `executable` in `games/Game/game.json` to the game's `.exe`, relative to the prefix, for example `drive_c/Games/Game/game.exe`.
+Point `install` at the game's installer, or at a folder for portable games (most CD-era LAN games):
+
+```bash
+./yapl install game "Game" --installer ~/Downloads/setup_game.exe
+./yapl install game "Half-Life" --from /mnt/cdrom/Half-Life
+```
+
+`install` runs `setup` first if the prefix doesn't exist yet. It then runs the installer inside the prefix, or copies the folder to `drive_c/Games/<name>`, and finds the executable it added. Uninstallers, redistributables and crash reporters are skipped, and the remaining executables are ranked by how well their names match the game. The best match is written to `executable` in `game.json` and the ranked list is printed:
+
+```
+Detected executables (best match first):
+  * drive_c/Games/Half-Life/hl.exe
+    drive_c/Games/Half-Life/hlds.exe
+✅ Set executable to drive_c/Games/Half-Life/hl.exe in games/Half-Life/game.json
+```
+
+If `game.json` already names a custom executable it is left alone. Pass `--executable <path>` to choose one yourself.
 
 ### 3\. Package it
 
@@ -81,6 +97,7 @@ YAPL automatically finds the game in `games/` or `apps/` — you never need to s
 | Command                        | Description                                                                      |
 | :----------------------------- | :------------------------------------------------------------------------------- |
 | `setup game\|app <name>`       | Creates the Wine prefix and downloads all defined dependencies.                  |
+| `install game\|app <name>`     | Installs from `--installer <file>` or `--from <dir>` and detects the executable.  |
 | `run <name>`                   | Launches the application using the configured environment.                       |
 | `package <name>`               | Compresses the game/app directory into a `.tar` archive (default: `.tar.xz`).   |
 | `unpackage game\|app <files>`  | Extracts one or more archives into `games/` or `apps/`.                          |

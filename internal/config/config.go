@@ -74,6 +74,10 @@ type App struct {
 	BackgroundServiceDelayMs int      `json:"background_service_delay_ms,omitempty"`
 }
 
+// PlaceholderExecutable is the executable new configs start with; `install`
+// replaces it with the detected game executable.
+const PlaceholderExecutable = "drive_c/windows/explorer.exe"
+
 // DXVKDirectXVersions lists the accepted dxvk_directx_version values.
 var DXVKDirectXVersions = []string{"9", "10", "11"}
 
@@ -169,7 +173,7 @@ func LoadOrCreateApp(appType, appName, configName string, globalCfg Global, defa
 		ProtonVersion:  firstProton,
 		RuntimeVersion: firstRuntime,
 		LaunchMethod:   launchMethod,
-		Executable:     "drive_c/windows/explorer.exe",
+		Executable:     PlaceholderExecutable,
 		LaunchArgs:     []string{},
 		Winetricks:     []string{},
 	}
@@ -258,6 +262,11 @@ func preferredVersion(versions map[string]VersionInfo, preferred string) string 
 		return ""
 	}
 	return keys[0]
+}
+
+// SaveApp writes an app or game config to path.
+func SaveApp(path string, cfg App) error {
+	return writeJSONFile(path, cfg)
 }
 
 // LoadApp reads an existing app config file without creating one if missing.

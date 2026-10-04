@@ -245,7 +245,7 @@ func RunDirectly(prefixPath string, appCfg config.App, globalCfg config.Global, 
 		return fmt.Errorf("failed to write steam_appid.txt: %w", err)
 	}
 
-	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
+	fullExePath := executablePath(absPrefix, appCfg.Executable)
 	args := append([]string{fullExePath}, appCfg.LaunchArgs...)
 
 	cmd := exec.Command(wineExecutablePath, args...)
@@ -297,7 +297,7 @@ func RunInContainer(prefixPath string, appCfg config.App, globalCfg config.Globa
 		return fmt.Errorf("failed to write steam_appid.txt: %w", err)
 	}
 
-	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
+	fullExePath := executablePath(absPrefix, appCfg.Executable)
 	protonVerb := "waitforexitandrun"
 
 	runnerArgs := []string{
@@ -347,7 +347,7 @@ func RunWithUMU(prefixPath string, appCfg config.App, globalCfg config.Global, d
 	if err != nil {
 		return fmt.Errorf("could not resolve proton base path: %w", err)
 	}
-	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
+	fullExePath := executablePath(absPrefix, appCfg.Executable)
 
 	args := append([]string{fullExePath}, append(appCfg.LaunchArgs, appCfg.UMUOptions.LaunchArgs...)...)
 	cmd := exec.Command(umuRunPath, args...)
@@ -441,7 +441,9 @@ func buildProtonEnv(absPrefix, protonBasePath string, appCfg config.App, vinfo c
 // writeSteamAppID writes the Steam app ID file next to the executable inside the Wine prefix.
 // It is a no-op when appID is empty or "0".
 func writeSteamAppID(absPrefix, executable, appID string) error {
-	if appID == "" || appID == "0" {
+	// An absolute executable is something outside the prefix (an installer),
+	// which must not get a steam_appid.txt dropped next to it.
+	if appID == "" || appID == "0" || filepath.IsAbs(executable) {
 		return nil
 	}
 	fullExePath := filepath.Join(absPrefix, executable)
@@ -449,7 +451,43 @@ func writeSteamAppID(absPrefix, executable, appID string) error {
 	return os.WriteFile(appIDPath, []byte(appID), 0644)
 }
 
+// WaitForWineserver blocks until every Wine process in the prefix has
+// exited. Installers often start a child process and return immediately.
+func WaitForWineserver(prefixPath string, appCfg config.App, globalCfg config.Global) error {
+	absPrefix, err := fs.GetAbsolutePath(prefixPath)
+	if err != nil {
+		return fmt.Errorf("could not resolve prefix path: %w", err)
+	}
+	vinfo, err := getProtonInfo(appCfg, globalCfg)
+	if err != nil {
+		return err
+	}
+	protonBasePath, err := filepath.Abs(getProtonPath(appCfg.ProtonVersion, vinfo))
+	if err != nil {
+		return err
+	}
+	for _, dir := range append(wineBinPaths(protonBasePath), filepath.Join(protonBasePath, "usr", "bin")) {
+		server := filepath.Join(dir, "wineserver")
+		if !fileExists(server) {
+			continue
+		}
+		cmd := exec.Command(server, "-w")
+		cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, vinfo, false)
+		return cmd.Run()
+	}
+	return nil
+}
+
 // --- Private Helpers ---
+
+// executablePath resolves a config executable: relative paths live inside
+// the prefix, absolute ones (installers) are used as given.
+func executablePath(absPrefix, executable string) string {
+	if filepath.IsAbs(executable) {
+		return executable
+	}
+	return filepath.Join(absPrefix, executable)
+}
 
 // DefaultBackgroundServiceDelayMs gives helper processes time to open their
 // sockets before the main executable starts looking for them.

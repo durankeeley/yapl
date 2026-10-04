@@ -1,6 +1,6 @@
 # PRD-40 - `yapl install`: Install a Game From an Installer or Folder
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** M
 **Sprint:** Phase 1 — Out-of-the-box foundation
@@ -39,10 +39,10 @@ yapl install game "Half-Life" --from /mnt/cdrom/Half-Life
 
 ## 4. Execution & Milestones
 
-- [ ] `detect` package with table-driven tests.
-- [ ] Runners accept absolute executable paths.
-- [ ] `install` command with `--from` path tested end-to-end (no Wine).
-- [ ] README "Adding a game" section and CLI help.
+- [x] `detect` package with table-driven tests.
+- [x] Runners accept absolute executable paths.
+- [x] `install` command with `--from` path tested end-to-end (no Wine).
+- [x] README "Adding a game" section and CLI help.
 
 ### Acceptance scenarios
 * **Given** a portable game folder containing `hl.exe` and `uninstall.exe` **when** I run `yapl install game "Half-Life" --from <dir>` **then** the folder is in `drive_c/Games/Half-Life` and `executable` is `drive_c/Games/Half-Life/hl.exe`.

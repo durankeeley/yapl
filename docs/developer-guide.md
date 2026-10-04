@@ -226,6 +226,16 @@ Here's what happens when you type `./yapl run "Doom"`:
 
 ---
 
+## How `install` flows through the code
+
+1. **`lifecycle` module** validates `<game|app> <name>` and that exactly one of `--installer`/`--from` is given, then loads or creates the config.
+2. **`app.Install`** runs `Setup` if the prefix isn't initialised, then takes a `detect.Snapshot` of every `.exe` under `drive_c` (excluding `drive_c/windows`).
+3. `--from` copies the folder to `drive_c/Games/<name>`. `--installer` reuses `app.launch` with the installer as an absolute executable (runners accept absolute paths, and `steam_appid.txt` is never written next to an installer). In `direct` mode it then waits with `wineserver -w`, because installers often fork and return.
+4. A second snapshot gives the new executables. **`detect.Candidates`** drops helpers (uninstallers, redistributables, crash reporters) and ranks the rest by full-name match, initials (`hl.exe` for Half-Life), word matches, then directory depth and file size. The weights are named constants in `internal/detect`.
+5. The best match replaces the placeholder executable and the config is saved to `App.ConfigFile`, which honours `--config`.
+
+---
+
 ## How a typical `pull` flows through the code
 
 Here's what happens when you type `./yapl pull --server 192.168.1.10:8471 "Doom" game`:

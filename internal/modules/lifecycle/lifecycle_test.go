@@ -55,7 +55,7 @@ func TestModule(t *testing.T) {
 		for _, c := range (Module{}).Commands() {
 			verbs = append(verbs, c.Verb)
 		}
-		if got := strings.Join(verbs, ","); got != "setup,run,package,unpackage,info,list,clean" {
+		if got := strings.Join(verbs, ","); got != "setup,install,run,package,unpackage,info,list,clean" {
 			t.Fatalf("verbs = %s", got)
 		}
 	})
@@ -176,4 +176,71 @@ func TestPackageAndRunValidation(t *testing.T) {
 			t.Fatalf("exit %d err:\n%s", code, errOut)
 		}
 	})
+}
+
+func TestInstall(t *testing.T) {
+	t.Run("given a portable folder when install runs then the game is copied and the executable recorded", func(t *testing.T) {
+		// Given
+		inLibrary(t)
+		os.WriteFile("runner.json", []byte(`{"proton_versions":{}}`), 0644)
+		writeGame(t, "HalfLife", `{"proton_version":"system","launch_method":"direct","executable":"drive_c/windows/explorer.exe"}`)
+		os.WriteFile(filepath.Join("games", "HalfLife", "prefix", "system.reg"), nil, 0644)
+		src := t.TempDir()
+		os.WriteFile(filepath.Join(src, "hl.exe"), []byte("exe"), 0755)
+
+		// When
+		code, out, errOut := execute(t, "install", "game", "HalfLife", "--from", src)
+
+		// Then
+		if code != kernel.ExitOK {
+			t.Fatalf("exit %d\n%s\n%s", code, out, errOut)
+		}
+		cfg, _ := os.ReadFile(filepath.Join("games", "HalfLife", "game.json"))
+		if !strings.Contains(string(cfg), "drive_c/Games/HalfLife/hl.exe") {
+			t.Fatalf("config not updated: %s", cfg)
+		}
+	})
+
+	t.Run("given a custom config file when install runs then that file is the one updated", func(t *testing.T) {
+		// Given
+		inLibrary(t)
+		os.WriteFile("runner.json", []byte(`{"proton_versions":{}}`), 0644)
+		writeGame(t, "HalfLife", validGame)
+		os.WriteFile(filepath.Join("games", "HalfLife", "cstrike.json"), []byte(`{"proton_version":"system","launch_method":"direct","executable":"drive_c/windows/explorer.exe"}`), 0644)
+		os.WriteFile(filepath.Join("games", "HalfLife", "prefix", "system.reg"), nil, 0644)
+		src := t.TempDir()
+		os.WriteFile(filepath.Join(src, "hl.exe"), []byte("exe"), 0755)
+
+		// When
+		code, _, errOut := execute(t, "install", "game", "HalfLife", "--from", src, "--config", "cstrike.json")
+
+		// Then
+		if code != kernel.ExitOK {
+			t.Fatalf("exit %d\n%s", code, errOut)
+		}
+		custom, _ := os.ReadFile(filepath.Join("games", "HalfLife", "cstrike.json"))
+		if !strings.Contains(string(custom), "hl.exe") {
+			t.Fatalf("cstrike.json not updated: %s", custom)
+		}
+	})
+
+	usage := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"given neither --installer nor --from then it is a usage error", []string{"install", "game", "Doom"}, "exactly one"},
+		{"given both --installer and --from then it is a usage error", []string{"install", "game", "Doom", "--installer", "a.exe", "--from", "dir"}, "exactly one"},
+		{"given a wrong kind then it is a usage error", []string{"install", "movie", "Doom", "--from", "dir"}, "game or app"},
+		{"given no name then it is a usage error", []string{"install", "game", "--from", "dir"}, "name is required"},
+	}
+	for _, tc := range usage {
+		t.Run(tc.name, func(t *testing.T) {
+			inLibrary(t)
+			code, _, errOut := execute(t, tc.args...)
+			if code != kernel.ExitUsage || !strings.Contains(errOut, tc.want) {
+				t.Fatalf("exit %d err:\n%s", code, errOut)
+			}
+		})
+	}
 }

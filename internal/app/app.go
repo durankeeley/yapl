@@ -27,6 +27,8 @@ type App struct {
 	AppConfig     config.App
 	AppDir        string
 	PrefixPath    string
+	// ConfigFile is where AppConfig was loaded from and is saved back to.
+	ConfigFile string
 }
 
 // New creates and initializes a new App instance.
@@ -42,6 +44,7 @@ func New(appType, appName string, force, debug, steam bool, gc config.Global, ac
 		AppConfig:     ac,
 		AppDir:        appDir,
 		PrefixPath:    paths.Prefix(appDir),
+		ConfigFile:    filepath.Join(appDir, paths.DefaultConfigName(appType)),
 	}
 }
 
@@ -418,37 +421,46 @@ func (a *App) Run() error {
 		return err
 	}
 	fmt.Printf("🚀 Launching '%s'...\n", a.Name)
-	if err := dependency.EnsureAll(a.AppConfig, a.ForceUpgrade, a.GlobalConfig); err != nil {
+	return a.launch(a.AppConfig)
+}
+
+// launch ensures dependencies and the prefix, then starts cfg.Executable
+// with the configured launch method.
+func (a *App) launch(cfg config.App) error {
+	if err := dependency.EnsureAll(cfg, a.ForceUpgrade, a.GlobalConfig); err != nil {
 		return err
 	}
-	if err := dependency.EnsureRuntime(a.AppConfig, a.GlobalConfig); err != nil {
+	if err := dependency.EnsureRuntime(cfg, a.GlobalConfig); err != nil {
 		if strings.Contains(err.Error(), "runtime version check failed") {
 			fmt.Fprintf(os.Stderr, "⚠️  Warning: %v — proceeding with cached runtime\n", err)
 		} else {
 			return err
 		}
 	}
-	if err := command.InitializePrefix(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.DebugMode); err != nil {
+	if err := command.InitializePrefix(a.PrefixPath, cfg, a.GlobalConfig, a.DebugMode); err != nil {
 		return err
 	}
-	if err := dependency.EnsureWinetricks(a.PrefixPath, a.AppConfig.Winetricks); err != nil {
+	if err := dependency.EnsureWinetricks(a.PrefixPath, cfg.Winetricks); err != nil {
 		return err
 	}
 
-	method := a.AppConfig.LaunchMethod
-	if method == "" {
-		method = defaults.LaunchMethod
-	}
-
+	method := launchMethod(cfg)
 	fmt.Printf("-> Using launch method from config: %s\n", method)
 	switch method {
 	case "direct":
-		return command.RunDirectly(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.IsSteamPrefix, a.DebugMode)
+		return command.RunDirectly(a.PrefixPath, cfg, a.GlobalConfig, a.IsSteamPrefix, a.DebugMode)
 	case "container":
-		return command.RunInContainer(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.DebugMode)
+		return command.RunInContainer(a.PrefixPath, cfg, a.GlobalConfig, a.DebugMode)
 	case "umu":
-		return command.RunWithUMU(a.PrefixPath, a.AppConfig, a.GlobalConfig, a.DebugMode)
+		return command.RunWithUMU(a.PrefixPath, cfg, a.GlobalConfig, a.DebugMode)
 	default:
 		return fmt.Errorf("unknown launch_method: '%s'. Please use 'direct', 'container', or 'umu'", method)
 	}
+}
+
+func launchMethod(cfg config.App) string {
+	if cfg.LaunchMethod == "" {
+		return defaults.LaunchMethod
+	}
+	return cfg.LaunchMethod
 }
