@@ -209,7 +209,7 @@ Start a LAN package server
 yapl serve --packages-dir <path> [flags]
 ```
 
-Serves archives from <path>/games and <path>/apps over HTTP and announces itself on the LAN by UDP broadcast.
+Serves packages from <path>/games and <path>/apps over the v1 HTTP API (plus the legacy /packages endpoints) and announces itself on the LAN by UDP broadcast. Versioned packages live in <path>/games/<name>/<version>/; flat <name>.tar.* files copied in by hand are served too, and the directory is rescanned every 30s.
 
 | Flag | Description | Default |
 |------|-------------|---------|

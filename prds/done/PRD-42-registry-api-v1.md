@@ -1,6 +1,6 @@
 # PRD-42 - Registry API v1 and Versioned Storage
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** L
 **Sprint:** Phase 2 — Registry server
@@ -47,10 +47,10 @@ components/<kind>/<version>/...            PRD-43
 
 ## 4. Execution & Milestones
 
-- [ ] `store` package: scan, latest resolution, legacy compatibility, name validation — table-driven tests on `t.TempDir()` trees.
-- [ ] `api` package: handler tests via `httptest`.
-- [ ] `serve` command wired; old `internal/server` removed with its tests ported.
-- [ ] README "LAN package server" section rewritten with API table.
+- [x] `store` package: scan, latest resolution, legacy compatibility, name validation — table-driven tests on `t.TempDir()` trees.
+- [x] `api` package: handler tests via `httptest`.
+- [x] `serve` command wired; `internal/server` kept as the composition root (store + API + rescan + broadcast) with its tests rewritten.
+- [x] README "LAN package server" section rewritten with API table.
 
 ### Acceptance scenarios
 * **Given** versions 1.0.0, 1.10.0, 1.2.0 of Doom **when** I GET `/v1/packages/Doom/latest/manifest` **then** I get 1.10.0.

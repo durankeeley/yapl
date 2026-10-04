@@ -454,31 +454,30 @@ func TestUnpackage_ReturnsErrorWhenExtractionFails(t *testing.T) {
 
 // --- trimArchiveSuffix ---
 
-func TestTrimArchiveSuffix(t *testing.T) {
+func TestParseName(t *testing.T) {
 	cases := []struct {
-		// Given an archive filename
-		input string
-		// Then the name and ok flag should match
-		wantName string
-		wantOk   bool
+		input      string
+		wantName   string
+		wantFormat string
+		wantOk     bool
 	}{
-		{"game.tar.gz", "game", true},
-		{"game.tar.xz", "game", true},
-		{"game.tar.zst", "game", true},
-		{"game.zip", "", false},
-		{"game.tar", "", false},
-		{"bare", "", false},
+		{"game.tar.gz", "game", "gz", true},
+		{"game.tar.xz", "game", "xz", true},
+		{"Need for Speed.tar.zst", "Need for Speed", "zst", true},
+		{"game.zip", "", "", false},
+		{"game.tar", "", "", false},
+		{"bare", "", "", false},
 	}
-
 	for _, tc := range cases {
-		// When trimArchiveSuffix is called
-		name, ok := trimArchiveSuffix(tc.input)
-		if ok != tc.wantOk {
-			t.Errorf("Given filename %q: expected ok=%v got ok=%v", tc.input, tc.wantOk, ok)
-		}
-		if ok && name != tc.wantName {
-			t.Errorf("Given filename %q: expected name=%q got name=%q", tc.input, tc.wantName, name)
-		}
+		t.Run("given "+tc.input+" then the name and format are parsed", func(t *testing.T) {
+			// When
+			name, format, ok := ParseName(tc.input)
+
+			// Then
+			if ok != tc.wantOk || name != tc.wantName || format != tc.wantFormat {
+				t.Fatalf("ParseName(%q) = %q, %q, %v", tc.input, name, format, ok)
+			}
+		})
 	}
 }
 

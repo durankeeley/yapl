@@ -10,7 +10,7 @@ import (
 )
 
 // Version is bumped whenever the server's behaviour or API changes.
-const Version = "1.0.0"
+const Version = "2.0.0"
 
 // Module registers the registry commands with the kernel.
 type Module struct{}
@@ -27,7 +27,7 @@ func serveCommand() kernel.Command {
 		Verb:        "serve",
 		Usage:       "serve --packages-dir <path> [flags]",
 		Summary:     "Start a LAN package server",
-		Description: "Serves archives from <path>/games and <path>/apps over HTTP and announces itself on the LAN by UDP broadcast.",
+		Description: "Serves packages from <path>/games and <path>/apps over the v1 HTTP API (plus the legacy /packages endpoints) and announces itself on the LAN by UDP broadcast. Versioned packages live in <path>/games/<name>/<version>/; flat <name>.tar.* files copied in by hand are served too, and the directory is rescanned every " + defaults.ManifestRefreshInterval.String() + ".",
 		Examples:    []string{"yapl serve --packages-dir /srv/games", "yapl serve --packages-dir /srv/games --auth password --password lanparty"},
 		Flags: func(fs *flag.FlagSet) {
 			fs.String("packages-dir", "", "Directory containing packaged archives (`path`, required).")
@@ -40,11 +40,14 @@ func serveCommand() kernel.Command {
 			if dir == "" {
 				return kernel.UsageError("--packages-dir is required")
 			}
+			versions := ctx.Kernel.Versions()
 			s, err := server.New(server.Config{
 				PackagesDir: dir,
 				Port:        ctx.Int("port"),
 				Auth:        ctx.String("auth"),
 				Password:    ctx.String("password"),
+				Kernel:      versions.Kernel,
+				Modules:     versions.Modules,
 			})
 			if err != nil {
 				return err

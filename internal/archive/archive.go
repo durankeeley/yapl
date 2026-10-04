@@ -105,7 +105,7 @@ func Unpackage(targetDir string, archivePaths []string) error {
 	fmt.Println("📦 Starting unpackaging process...")
 	for _, archivePath := range archivePaths {
 		fmt.Printf("-> Unpackaging '%s'...\n", archivePath)
-		nameWithoutExt, ok := trimArchiveSuffix(filepath.Base(archivePath))
+		nameWithoutExt, _, ok := ParseName(filepath.Base(archivePath))
 		if !ok {
 			fmt.Fprintf(os.Stderr, "⚠️  Skipping '%s': unrecognized archive extension.\n", archivePath)
 			continue
@@ -412,24 +412,28 @@ func writeTree(tw *tar.Writer, walkDir, baseDir, skip string) error {
 }
 
 func getExtensionForFormat(format string) (string, error) {
-	switch format {
-	case "gz":
-		return ".tar.gz", nil
-	case "xz":
-		return ".tar.xz", nil
-	case "zst":
-		return ".tar.zst", nil
-	default:
-		return "", fmt.Errorf("unsupported package format: %s. Use 'gz', 'xz', or 'zst'", format)
-	}
-}
-
-func trimArchiveSuffix(filename string) (string, bool) {
-	suffixes := []string{".tar.gz", ".tar.xz", ".tar.zst"}
-	for _, suffix := range suffixes {
-		if strings.HasSuffix(filename, suffix) {
-			return strings.TrimSuffix(filename, suffix), true
+	for _, e := range archiveExtensions {
+		if e.format == format {
+			return e.ext, nil
 		}
 	}
-	return "", false
+	return "", fmt.Errorf("unsupported package format: %s. Use 'gz', 'xz', or 'zst'", format)
+}
+
+// archiveExtensions maps each supported package extension to its format.
+var archiveExtensions = []struct{ ext, format string }{
+	{".tar.gz", "gz"},
+	{".tar.xz", "xz"},
+	{".tar.zst", "zst"},
+}
+
+// ParseName splits a package file name such as "Doom.tar.xz" into its
+// package name and compression format.
+func ParseName(filename string) (name, format string, ok bool) {
+	for _, e := range archiveExtensions {
+		if strings.HasSuffix(filename, e.ext) {
+			return strings.TrimSuffix(filename, e.ext), e.format, true
+		}
+	}
+	return "", "", false
 }

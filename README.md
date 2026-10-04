@@ -167,18 +167,25 @@ Free up disk space or reset a broken prefix without touching any other game's fi
 ./yapl clean "Doom" --all --yes
 ```
 
-### `serve` — host a LAN package server
+### `serve` — host a LAN registry
 
-Organise your packaged archives into `games/` and `apps/` subdirectories inside a packages directory, then run this on the host machine. Clients can discover the server automatically on the LAN and pull any game with a single command.
+The server works like a local Docker Hub for your games. It keeps every version of every package, with title, description and cover art, and clients pull them by name and tag.
 
 ```
 /srv/games/
   games/
-    Doom.tar.xz
-    NeedForSpeedMostWanted.tar.xz
+    Doom/
+      1.0.0/  Doom.tar.xz  manifest.json  cover.jpg
+      1.1.0/  Doom.tar.xz  manifest.json  cover.jpg
+    Quake.tar.gz                 ← drop-in archive, served as version 0.0.0
+    Half-Life.tar.xz             ← drop-in with sidecars from `yapl package`
+    Half-Life.manifest.json
+    Half-Life.cover.jpg
   apps/
     SteamCMD.tar.xz
 ```
+
+Versioned folders are written by `yapl push` (see [Publishing to the server](#push--publish-to-a-lan-registry)). You can still copy archives in by hand. Copy the `.manifest.json` and `.cover.*` files that `yapl package` writes alongside them, and the server shows their title, version and art. Without sidecars a drop-in archive is listed as version `0.0.0` with no checksum.
 
 ```bash
 # Open (no auth) — recommended for a trusted LAN
@@ -191,7 +198,21 @@ Organise your packaged archives into `games/` and `apps/` subdirectories inside 
 ./yapl serve --packages-dir /srv/games --port 9000
 ```
 
-The server scans the subdirectories on startup and refreshes every 30 seconds, so you can add new packages without restarting. It also broadcasts its address via UDP every 2 seconds so clients can auto-discover it.
+The server rescans the directory every 30 seconds, so new packages show up without a restart. It broadcasts its address over UDP every 2 seconds so clients can find it automatically.
+
+#### Registry API
+
+| Method | Path | Returns |
+|---|---|---|
+| GET | `/v1/info` | API version, kernel and module versions, auth mode. Always public. |
+| GET | `/v1/packages` | Catalog: name, type, title, description, tags, players, latest, versions, size, cover URL |
+| GET | `/v1/packages/{name}` | Every version's manifest, newest first |
+| GET | `/v1/packages/{name}/{version}/manifest` | One manifest. `latest` resolves to the highest version. |
+| GET | `/v1/packages/{name}/{version}/archive` | The archive, with the `X-Yapl-SHA256` header. Supports `Range`. |
+| GET | `/v1/packages/{name}/{version}/cover` | Cover image |
+| GET | `/packages`, `/packages/{name}` | Legacy endpoints for older YAPL clients (latest version only) |
+
+Names and versions that aren't safe path segments (`..`, `/`, a leading `.`) are rejected with `400`.
 
 ### `pull` — download a game from a YAPL server
 

@@ -203,8 +203,14 @@ Describes a package: `Metadata` (authored in `games/<name>/metadata.json`), the 
 ### `internal/fs/fs.go`
 Simple filesystem helpers that are needed in more than one place: copy a file, copy a directory, check if a directory exists and isn't empty, resolve an absolute path.
 
+### `internal/registry/store/`
+Indexes a packages directory: versioned packages (`games/<name>/<version>/manifest.json` plus archive and cover) and legacy flat archives with optional `.manifest.json`/`.cover.*` sidecars. `Refresh` rebuilds the index and swaps it in atomically. `Resolve(name, tag)` handles `latest` with semantic version ordering, `Catalog()` returns one summary per package, and `Versions(name)` returns them newest first. Invalid or mismatched manifests are skipped with a warning. Hidden directories (`.staging-*`, `.upload-*`) are never indexed, which is what makes uploads atomic (PRD-43).
+
+### `internal/registry/api/`
+The HTTP layer over the store: the `/v1/...` routes (Go 1.22 `ServeMux` patterns), the legacy `/packages` routes, Basic-auth for everything except `/v1/info`, and JSON errors (`400` invalid name, `404` not found). Archives are served with `http.ServeContent`, so `Range` requests work, and they carry the `X-Yapl-SHA256` header.
+
 ### `internal/server/server.go`
-The LAN package server. Scans `<packages-dir>/games/` and `<packages-dir>/apps/` for `*.tar.*` archives and caches a manifest in memory. Each `PackageEntry` carries a `Type` field (`"game"` or `"app"`) so clients know where to unpackage without being told explicitly. Serves `GET /packages` (JSON list) and `GET /packages/{name}` (file download via `http.ServeContent`). Supports `open` and `password` (HTTP Basic Auth) auth modes. The manifest refreshes every 30 seconds and the server broadcasts its presence via UDP every 2 seconds so clients can auto-discover it.
+Composes store + API, rescans every `defaults.ManifestRefreshInterval` and broadcasts `YAPL:<port>` every `defaults.BroadcastInterval`. The `serve` command passes the kernel and module versions in for `/v1/info`.
 
 ### `internal/client/client.go`
 The LAN package client. Connects to a YAPL server to list available packages or download one. `Download` returns the archive path and the entry type (`"game"` or `"app"`) so the caller can extract to the right directory. `Discover`/`DiscoverFrom` listen for the server's UDP broadcast and return the server address. Handles auth headers, reports download progress, and cleans up partial files on failure.
