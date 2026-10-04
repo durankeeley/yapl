@@ -27,14 +27,14 @@ Phases supersede the sprint ordering below for anything they list. Within a phas
 | PRD-9  | Download progress (`internal/progress`) | S | ✅ Done |
 | PRD-40 | `yapl install` from installer or folder, with executable detection | M | ✅ Done |
 
-### Phase 2 — Registry server ("Docker Hub")
-| PRD | Title | Size |
-|-----|-------|------|
-| PRD-41 | Package manifest: metadata, versions, checksums, components | M |
-| PRD-42 | Registry API v1 and versioned storage | L |
-| PRD-43 | Shared component layers and `yapl push` | L |
-| PRD-44 | Pull v2: tags, verified streaming install, components, remembered server | L |
-| PRD-45 | `yapl upgrade`: per-part upgrades (games keep saves, self, catalog) | L |
+### Phase 2 — Registry server ("Docker Hub") ✅ Complete
+| PRD | Title | Size | Status |
+|-----|-------|------|--------|
+| PRD-41 | Package manifest: metadata, versions, checksums, components | M | ✅ Done |
+| PRD-42 | Registry API v1 and versioned storage | L | ✅ Done |
+| PRD-43 | Shared component layers and `yapl push` | L | ✅ Done |
+| PRD-44 | Pull v2: tags, verified streaming install, components, remembered server | L | ✅ Done |
+| PRD-45 | `yapl upgrade`: per-part upgrades (games keep saves, self, catalog) | L | ✅ Done |
 
 ### Phase 3 — Console client
 | PRD | Title | Size |

@@ -1,6 +1,6 @@
 # PRD-46 - Console Service: Local API for Library, Store, Jobs and Sessions
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** High
 **Size:** L
 **Sprint:** Phase 3 — Console client

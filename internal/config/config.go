@@ -292,7 +292,7 @@ func writeJSONFile(path string, v interface{}) error {
 	if err != nil {
 		return fmt.Errorf("marshal json: %w", err)
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, append(data, '\n'), 0644)
 }
 
 // VersionInfoFor looks up a component's runner.json entry by kind.
