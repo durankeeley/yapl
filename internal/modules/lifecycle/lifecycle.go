@@ -11,6 +11,7 @@ import (
 
 	"yapl/internal/app"
 	"yapl/internal/archive"
+	"yapl/internal/catalog"
 	"yapl/internal/config"
 	"yapl/internal/defaults"
 	"yapl/internal/kernel"
@@ -223,7 +224,7 @@ func findApp(ctx *kernel.Context) (*app.App, error) {
 }
 
 func loadApp(ctx *kernel.Context, appType, name, method string) (*app.App, error) {
-	globalCfg, err := config.LoadOrCreateGlobal(paths.RunnerConfig)
+	globalCfg, err := config.LoadOrCreateGlobal(paths.RunnerConfig, catalog.Default())
 	if err != nil {
 		return nil, fmt.Errorf("could not load global config: %w", err)
 	}

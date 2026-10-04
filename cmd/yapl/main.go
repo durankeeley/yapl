@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"yapl/internal/catalog"
 	"yapl/internal/kernel"
 	"yapl/internal/modules/lifecycle"
 	"yapl/internal/modules/registry"
@@ -14,6 +15,7 @@ import (
 
 func modules() []kernel.Module {
 	return []kernel.Module{
+		catalog.Module{},
 		lifecycle.Module{},
 		registry.Module{},
 		store.Module{},

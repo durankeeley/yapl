@@ -19,15 +19,16 @@ func TestLoadOrCreateGlobal_CreatesDefaultWhenFileMissing(t *testing.T) {
 	}
 	defer os.Chdir(orig)
 
-	// When LoadOrCreateGlobal is called
-	g, err := LoadOrCreateGlobal("runner.json")
+	// When LoadOrCreateGlobal is called with a fallback catalog
+	fallback := Global{ProtonVersions: map[string]VersionInfo{"GE-Proton11-7": {URL: "https://example/ge.tar.gz"}}, Defaults: Defaults{Proton: "GE-Proton11-7"}}
+	g, err := LoadOrCreateGlobal("runner.json", fallback)
 
-	// Then it returns a non-empty default config with no error
+	// Then it returns the fallback config with no error
 	if err != nil {
 		t.Fatalf("expected no error but got: %v", err)
 	}
-	if len(g.ProtonVersions) == 0 {
-		t.Fatal("expected default config to contain at least one proton version placeholder")
+	if g.Defaults.Proton != "GE-Proton11-7" || len(g.ProtonVersions) != 1 {
+		t.Fatalf("expected the fallback config, got %+v", g)
 	}
 
 	// And the runner.json file is created on disk
@@ -49,7 +50,7 @@ func TestLoadOrCreateGlobal_ReadsExistingFile(t *testing.T) {
 	}
 
 	// When LoadOrCreateGlobal is called
-	g, err := LoadOrCreateGlobal("runner.json")
+	g, err := LoadOrCreateGlobal("runner.json", Global{ProtonVersions: map[string]VersionInfo{"fallback": {}}})
 
 	// Then it reads the existing file and returns the correct config
 	if err != nil {
@@ -527,6 +528,73 @@ func TestValidateApp_EmptyLaunchMethodMeansDefault(t *testing.T) {
 		cfg := App{ProtonVersion: "ge", Executable: "x.exe"}
 		if err := ValidateApp(cfg); err == nil || !strings.Contains(err.Error(), "runtime_version is required") {
 			t.Fatalf("error = %v", err)
+		}
+	})
+}
+
+func TestLoadOrCreateApp_ChoosesVersionsDeterministically(t *testing.T) {
+	three := map[string]VersionInfo{"b-proton": {}, "a-proton": {}, "c-proton": {}}
+	tests := []struct {
+		name        string
+		global      Global
+		wantProton  string
+		wantRuntime string
+	}{
+		{
+			name:       "given a defaults block then the preferred proton is used",
+			global:     Global{ProtonVersions: three, Defaults: Defaults{Proton: "c-proton"}},
+			wantProton: "c-proton",
+		},
+		{
+			name:       "given no defaults block then the alphabetically first proton is used",
+			global:     Global{ProtonVersions: three},
+			wantProton: "a-proton",
+		},
+		{
+			name:       "given a preferred proton that is not defined then the alphabetically first is used",
+			global:     Global{ProtonVersions: three, Defaults: Defaults{Proton: "missing"}},
+			wantProton: "a-proton",
+		},
+		{
+			name:        "given several runtimes and a preferred one then it is used",
+			global:      Global{ProtonVersions: three, RuntimeVersions: map[string]VersionInfo{"soldier": {}, "sniper": {}}, Defaults: Defaults{Runtime: "sniper"}},
+			wantProton:  "a-proton",
+			wantRuntime: "sniper",
+		},
+		{
+			name:        "given several runtimes and no preference then the alphabetically first is used",
+			global:      Global{ProtonVersions: three, RuntimeVersions: map[string]VersionInfo{"soldier": {}, "sniper": {}}},
+			wantProton:  "a-proton",
+			wantRuntime: "sniper",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Given
+			d := t.TempDir()
+			orig, _ := os.Getwd()
+			os.Chdir(d)
+			defer os.Chdir(orig)
+
+			// When
+			app, err := LoadOrCreateApp("games", "Doom", "", tc.global, "")
+
+			// Then
+			if err != nil {
+				t.Fatal(err)
+			}
+			if app.ProtonVersion != tc.wantProton || app.RuntimeVersion != tc.wantRuntime {
+				t.Fatalf("got proton %q runtime %q, want %q %q", app.ProtonVersion, app.RuntimeVersion, tc.wantProton, tc.wantRuntime)
+			}
+		})
+	}
+}
+
+func TestMergeGlobal_KeepsLocalDefaults(t *testing.T) {
+	t.Run("given local defaults when a bundle with other defaults is merged then local defaults are kept", func(t *testing.T) {
+		merged, _ := MergeGlobal(Global{Defaults: Defaults{Proton: "local"}}, Global{Defaults: Defaults{Proton: "bundled"}})
+		if merged.Defaults.Proton != "local" {
+			t.Fatalf("defaults = %+v", merged.Defaults)
 		}
 	})
 }

@@ -29,6 +29,15 @@ type Global struct {
 	ProtonVersions     map[string]VersionInfo            `json:"proton_versions"`
 	RuntimeVersions    map[string]VersionInfo            `json:"runtime_versions"`
 	DependencyVersions map[string]map[string]VersionInfo `json:"dependency_versions"`
+	Defaults           Defaults                          `json:"defaults,omitempty"`
+}
+
+// Defaults names the versions new game and app configs are created with.
+type Defaults struct {
+	Proton  string `json:"proton,omitempty"`
+	Runtime string `json:"runtime,omitempty"`
+	DXVK    string `json:"dxvk,omitempty"`
+	VKD3D   string `json:"vkd3d,omitempty"`
 }
 
 type UMUOptions struct {
@@ -106,24 +115,19 @@ func ValidateApp(cfg App) error {
 
 // --- Loading and Saving Logic ---
 
-func LoadOrCreateGlobal(path string) (Global, error) {
+// LoadOrCreateGlobal reads runner.json, writing fallback to path first when
+// the file does not exist.
+func LoadOrCreateGlobal(path string, fallback Global) (Global, error) {
 	var g Global
 	err := readJSONFile(path, &g)
 	if !os.IsNotExist(err) {
 		return g, err
 	}
-
-	fmt.Println("-> No global 'runner.json' found. Creating a default one.")
-	defaultCfg := Global{
-		ProtonVersions:     map[string]VersionInfo{"EDIT_ME": {URL: "URL_TO_PROTON_TAR", Path: "OR_PROVIDE_ABSOLUTE_PATH_TO_PROTON_DIR"}},
-		RuntimeVersions:    map[string]VersionInfo{"sniper": {URL: "https://repo.steampowered.com/steamrt-images-sniper/snapshots/latest-container-runtime-public-beta/SteamLinuxRuntime_sniper.tar.xz", CheckForUpdates: true}},
-		DependencyVersions: map[string]map[string]VersionInfo{"dxvk": {"EDIT_ME": {URL: "URL_TO_DXVK_TAR"}}},
-	}
-	if err := writeJSONFile(path, defaultCfg); err != nil {
+	if err := writeJSONFile(path, fallback); err != nil {
 		return Global{}, fmt.Errorf("failed writing default runner.json: %w", err)
 	}
-	fmt.Println("✅ Default runner.json created. Please edit it with download URLs or local paths.")
-	return defaultCfg, nil
+	fmt.Printf("-> Created %s with the default Proton, runtime, DXVK and VKD3D versions.\n", path)
+	return fallback, nil
 }
 
 func LoadOrCreateApp(appType, appName, configName string, globalCfg Global, defaultMethod string) (App, error) {
@@ -150,17 +154,11 @@ func LoadOrCreateApp(appType, appName, configName string, globalCfg Global, defa
 		return App{}, err
 	}
 
-	firstProton := "PLEASE_SET_A_VERSION_FROM_RUNNER.JSON"
-	for key := range globalCfg.ProtonVersions {
-		firstProton = key
-		break
+	firstProton := preferredVersion(globalCfg.ProtonVersions, globalCfg.Defaults.Proton)
+	if firstProton == "" {
+		firstProton = "PLEASE_SET_A_VERSION_FROM_RUNNER.JSON"
 	}
-
-	firstRuntime := ""
-	for key := range globalCfg.RuntimeVersions {
-		firstRuntime = key
-		break
-	}
+	firstRuntime := preferredVersion(globalCfg.RuntimeVersions, globalCfg.Defaults.Runtime)
 
 	launchMethod := defaults.LaunchMethod
 	if defaultMethod != "" {
@@ -204,6 +202,7 @@ func MergeGlobal(local, bundled Global) (Global, []string) {
 		ProtonVersions:     mergeVersions(local.ProtonVersions, bundled.ProtonVersions, paths.KindProton, &added),
 		RuntimeVersions:    mergeVersions(local.RuntimeVersions, bundled.RuntimeVersions, paths.KindRuntime, &added),
 		DependencyVersions: map[string]map[string]VersionInfo{},
+		Defaults:           mergeDefaults(local.Defaults, bundled.Defaults),
 	}
 	for kind, versions := range local.DependencyVersions {
 		merged.DependencyVersions[kind] = versions
@@ -213,6 +212,21 @@ func MergeGlobal(local, bundled Global) (Global, []string) {
 	}
 	sort.Strings(added)
 	return merged, added
+}
+
+func mergeDefaults(local, bundled Defaults) Defaults {
+	pick := func(l, b string) string {
+		if l != "" {
+			return l
+		}
+		return b
+	}
+	return Defaults{
+		Proton:  pick(local.Proton, bundled.Proton),
+		Runtime: pick(local.Runtime, bundled.Runtime),
+		DXVK:    pick(local.DXVK, bundled.DXVK),
+		VKD3D:   pick(local.VKD3D, bundled.VKD3D),
+	}
 }
 
 func mergeVersions(local, bundled map[string]VersionInfo, label string, added *[]string) map[string]VersionInfo {
@@ -227,6 +241,23 @@ func mergeVersions(local, bundled map[string]VersionInfo, label string, added *[
 		}
 	}
 	return out
+}
+
+// preferredVersion returns preferred when it is defined, otherwise the
+// alphabetically first key, so new configs never depend on map order.
+func preferredVersion(versions map[string]VersionInfo, preferred string) string {
+	if _, ok := versions[preferred]; ok {
+		return preferred
+	}
+	keys := make([]string, 0, len(versions))
+	for k := range versions {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	if len(keys) == 0 {
+		return ""
+	}
+	return keys[0]
 }
 
 // LoadApp reads an existing app config file without creating one if missing.

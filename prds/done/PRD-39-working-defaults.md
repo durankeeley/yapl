@@ -1,6 +1,6 @@
 # PRD-39 - Working Defaults Out of the Box
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** M
 **Sprint:** Phase 1 — Out-of-the-box foundation
@@ -28,17 +28,17 @@
 
 ### `config.Global`
 * New `Defaults struct{Proton, Runtime, DXVK, VKD3D string}` field (`json:"defaults,omitempty"`).
-* `LoadOrCreateGlobal` writes `catalog.Default()` instead of placeholders.
-* `LoadOrCreateApp` chooses `Defaults.Proton`, then the sorted first key, never map order. `Defaults.Runtime` likewise. New configs get `dependencies.dxvk_version`/`vkd3d_version` from defaults only for the `direct` method, where YAPL installs them itself.
+* `LoadOrCreateGlobal(path, fallback)` writes the fallback (callers pass `catalog.Default()`) instead of placeholders. The parameter avoids a `config` → `catalog` → `config` import cycle.
+* `LoadOrCreateApp` chooses `Defaults.Proton`, then the sorted first key, never map order. `Defaults.Runtime` likewise. `defaults.dxvk`/`defaults.vkd3d` are recorded for later use. New configs don't set `dxvk_version` yet, because the default container method gets DXVK from Proton itself and direct-mode installation is PRD-30.
 
 ### Existing users
 * An existing `runner.json` is never rewritten. Adding newer catalog pins to an existing file is handled by `yapl upgrade catalog` (PRD-45), which reuses `MergeGlobal` from PRD-37.
 
 ## 4. Execution & Milestones
 
-- [ ] Catalog package and tests.
-- [ ] `Defaults` field, deterministic selection, tests.
-- [ ] README Quick Start rewritten: setup works without editing JSON.
+- [x] Catalog package and tests.
+- [x] `Defaults` field, deterministic selection, tests.
+- [x] README Quick Start rewritten: setup works without editing JSON.
 
 ### Acceptance scenarios
 * **Given** an empty directory **when** I run `yapl setup game "Doom"` **then** `runner.json` defines GE-Proton11-7, the sniper runtime, DXVK and VKD3D, and `games/Doom/game.json` uses GE-Proton11-7 with the container method.

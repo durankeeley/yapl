@@ -252,3 +252,33 @@ func TestWorkdir(t *testing.T) {
 		}
 	})
 }
+
+func TestFreshLibraryGetsWorkingDefaults(t *testing.T) {
+	t.Run("given a game but no runner.json when a command loads it then runner.json is created from the pinned catalog", func(t *testing.T) {
+		// Given
+		workDir := t.TempDir()
+		gameDir := filepath.Join(workDir, "games", "Doom")
+		os.MkdirAll(gameDir, 0755)
+		os.WriteFile(filepath.Join(gameDir, "game.json"), []byte(`{"proton_version":"GE-Proton11-7","runtime_version":"sniper","executable":"drive_c/doom.exe"}`), 0644)
+
+		// When
+		res := runCLI(t, workDir, "info", "Doom")
+
+		// Then
+		if res.exitCode != 0 {
+			t.Fatalf("exit %d:\n%s", res.exitCode, res.output)
+		}
+		runner, err := os.ReadFile(filepath.Join(workDir, "runner.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"GE-Proton11-7-x86_64.tar.gz", "SteamLinuxRuntime_sniper", "dxvk-3.1.1", "vkd3d-proton-3.0.1", `"defaults"`} {
+			if !strings.Contains(string(runner), want) {
+				t.Errorf("runner.json missing %q", want)
+			}
+		}
+		if strings.Contains(string(runner), "EDIT_ME") {
+			t.Error("runner.json still contains placeholders")
+		}
+	})
+}

@@ -25,29 +25,24 @@ YAPL keeps things simple and organized.
 
 ## Quick Start
 
-### 1\. Initialize a Game Directory
-
-This command creates the folder structure (`./games/Game/`) and a default `game.json` for you.
+### 1\. Set up a game
 
 ```bash
 ./yapl setup game "Game"
 ```
 
-### 2\. Edit Your Configs
+On a fresh library this works without editing anything. YAPL creates:
 
-First, open the main `runner.json` file and add the download URLs for the Proton builds and other tools you want to use. This file is created with placeholder values the first time you run YAPL.
+* `runner.json` with a pinned, known-good set of components: GE-Proton11-7, the Steam Linux Runtime (sniper), DXVK 3.1.1 and VKD3D-Proton 3.0.1. `./yapl version` shows the catalog version these pins come from.
+* `games/Game/game.json` using those defaults and the `container` launch method.
 
-Next, open `games/Game/game.json` and tell it which versions you want this specific game to use. You'll also need to set the path to your game's main executable here. (See examples below).
+It then downloads the components and creates the Wine prefix at `games/Game/prefix/`.
 
-### 3\. Install & Package Your Game
+### 2\. Install the game into the prefix
 
-Run `setup` again. This time it will download all the components you configured.
+Install the game into the prefix (the first `setup` opens Explorer for this), then set `executable` in `games/Game/game.json` to the game's `.exe`, relative to the prefix, for example `drive_c/Games/Game/game.exe`.
 
-```bash
-./yapl setup game "Game"
-```
-
-Now install your game into the new Wine prefix (when you first create a Wine prefix it will open Explorer), which is located at `games/Game/prefix/`. Once it's installed, package the environment.
+### 3\. Package it
 
 ```bash
 # Creates 'Game.tar.xz' (xz is the default)
@@ -365,6 +360,12 @@ YAPL is made of independently versioned modules (`lifecycle`, `registry`, `store
 ## Configuration Examples
 
 ### `runner.json` (Global Toolbox)
+
+A new library gets a working `runner.json` automatically (see Quick Start). The `defaults` block names the versions that new game and app configs are created with. When it's missing, YAPL picks the alphabetically first version of each kind.
+
+```json
+"defaults": { "proton": "GE-Proton11-7", "runtime": "sniper", "dxvk": "3.1.1", "vkd3d": "3.0.1" }
+```
 
 This file defines all the tools you *can* use. You only need to define each version once. ld_library_path_components and wine_dll_path_components are optional and only needed if your Proton build has libraries in non-standard locations.
 
