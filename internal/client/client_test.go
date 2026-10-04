@@ -1,6 +1,7 @@
 package client_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -283,5 +284,23 @@ func TestClient_DiscoverTimesOutWhenNoServerPresent(t *testing.T) {
 	// Then it returns an error
 	if err == nil {
 		t.Fatal("expected timeout error when no server is broadcasting")
+	}
+}
+
+func TestClient_DownloadReportsProgress(t *testing.T) {
+	// Given a server with a game
+	content := bytes.Repeat([]byte("x"), 4096)
+	ts := newFakeServer(t, map[string][]byte{"Doom.tar.xz": content}, nil)
+	c := client.New(client.Config{Server: ts.URL, Auth: "open"})
+	var out bytes.Buffer
+
+	// When it is downloaded with a progress writer
+	if _, _, err := c.Download("Doom", t.TempDir(), &out); err != nil {
+		t.Fatal(err)
+	}
+
+	// Then the final progress line names the package and shows completion
+	if !strings.Contains(out.String(), "Downloading Doom:") || !strings.Contains(out.String(), "(100.0%)") {
+		t.Fatalf("progress output = %q", out.String())
 	}
 }

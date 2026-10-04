@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"yapl/internal/progress"
 )
 
 // PackageEntry describes a package available on a YAPL server.
@@ -111,33 +113,11 @@ func (c *Client) Download(name, outputDir string, progressW io.Writer) (archiveP
 		return "", "", fmt.Errorf("create output file: %w", err)
 	}
 
-	total := entry.SizeBytes
-	var written int64
-	buf := make([]byte, 32*1024)
-	var copyErr error
-	for {
-		n, readErr := resp.Body.Read(buf)
-		if n > 0 {
-			wn, writeErr := f.Write(buf[:n])
-			written += int64(wn)
-			if writeErr != nil {
-				copyErr = writeErr
-				break
-			}
-			if total > 0 && progressW != nil {
-				pct := written * 100 / total
-				fmt.Fprintf(progressW, "\rDownloading %s: %d%% (%d MB / %d MB)",
-					name, pct, written>>20, total>>20)
-			}
-		}
-		if readErr == io.EOF {
-			break
-		}
-		if readErr != nil {
-			copyErr = readErr
-			break
-		}
+	var report progress.Func
+	if progressW != nil {
+		report = progress.TerminalPrinter(progressW)
 	}
+	_, copyErr := io.Copy(f, progress.NewReader(resp.Body, name, entry.SizeBytes, report))
 	f.Close()
 
 	if copyErr != nil {
@@ -145,9 +125,6 @@ func (c *Client) Download(name, outputDir string, progressW io.Writer) (archiveP
 		return "", "", fmt.Errorf("download %q: %w", name, copyErr)
 	}
 
-	if progressW != nil {
-		fmt.Fprintln(progressW)
-	}
 	return destPath, entry.Type, nil
 }
 

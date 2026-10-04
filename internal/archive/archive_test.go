@@ -3,12 +3,16 @@ package archive
 import (
 	"archive/tar"
 	"compress/gzip"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"yapl/internal/config"
+	"yapl/internal/progress"
 )
 
 // --- Helpers ---
@@ -541,5 +545,32 @@ func TestInstallBundledDeps_MergesRunnerJSONIntoExistingFile(t *testing.T) {
 	}
 	if g.ProtonVersions["ge8"].URL != "local-ge8" {
 		t.Errorf("local ge8 overwritten: %+v", g.ProtonVersions["ge8"])
+	}
+}
+
+func TestExtract_HTTPDownloadReportsProgress(t *testing.T) {
+	// Given an archive served over HTTP
+	src := makeTarGz(t, t.TempDir(), map[string]string{"top/file.txt": "hello"})
+	data, _ := os.ReadFile(src)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		w.Write(data)
+	}))
+	defer srv.Close()
+	var updates []progress.Update
+	ar := &Archive{Source: srv.URL + "/dxvk.tar.gz", Progress: func(u progress.Update) { updates = append(updates, u) }}
+
+	// When it is extracted
+	if err := ar.Extract(t.TempDir(), true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Then the final update is complete with the content length as total
+	if len(updates) == 0 {
+		t.Fatal("no progress reported")
+	}
+	last := updates[len(updates)-1]
+	if !last.Complete || last.Total != int64(len(data)) || last.Label != "dxvk.tar.gz" {
+		t.Fatalf("last update = %+v", last)
 	}
 }

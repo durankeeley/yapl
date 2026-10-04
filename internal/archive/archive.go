@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -18,6 +19,7 @@ import (
 	"yapl/internal/defaults"
 	"yapl/internal/fs"
 	"yapl/internal/paths"
+	"yapl/internal/progress"
 )
 
 var httpClient = &http.Client{Timeout: defaults.DownloadTimeout}
@@ -25,6 +27,9 @@ var httpClient = &http.Client{Timeout: defaults.DownloadTimeout}
 // Archive represents a local or remote compressed tarball.
 type Archive struct {
 	Source string
+	// Progress receives download updates for HTTP sources; nil prints them
+	// to stdout.
+	Progress progress.Func
 }
 
 // Extract unpacks the archive to a destination path.
@@ -211,10 +216,20 @@ func (a *Archive) open() (io.ReadCloser, error) {
 			resp.Body.Close()
 			return nil, fmt.Errorf("download failed: %s", resp.Status)
 		}
-		return resp.Body, nil
+		report := a.Progress
+		if report == nil {
+			report = progress.TerminalPrinter(os.Stdout)
+		}
+		label := path.Base(resp.Request.URL.Path)
+		return readCloser{progress.NewReader(resp.Body, label, resp.ContentLength, report), resp.Body}, nil
 	}
 	fmt.Printf(" Reading local file %s...\n", a.Source)
 	return os.Open(a.Source)
+}
+
+type readCloser struct {
+	io.Reader
+	io.Closer
 }
 
 func getDecompressedReader(r io.Reader, sourceFilename string) (io.Reader, error) {

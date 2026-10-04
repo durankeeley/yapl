@@ -194,6 +194,8 @@ On a client machine, just name the game. The server tells the client whether it'
 ./yapl pull --auth password --password "lanparty" "Doom"
 ```
 
+Every download (Proton, runtime, DXVK and packages) shows progress such as `Downloading GE-Proton11-7-x86_64.tar.gz: 412.0 MB / 480.3 MB (85.8%)`. When output goes to a file or pipe, YAPL writes one line per 10% instead of redrawing the line.
+
 Auto-discovery listens for the server's UDP broadcast on port 8471 for up to 3 seconds. If discovery times out, pass `--server` to specify the address directly.
 
 ### `package --bundle-deps` — offline / LAN portability

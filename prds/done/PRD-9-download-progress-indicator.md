@@ -1,6 +1,6 @@
 # PRD-9 - Download Progress Indicator
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** Medium
 **Size:** M
 **Sprint:** Phase 1 — Out-of-the-box foundation
@@ -48,12 +48,12 @@ Proton builds and the Steam Linux Runtime are multi-gigabyte downloads. During `
 
 ## 4. Execution & Milestones
 
-- [ ] Write failing test: `TestProgressReader_CountsBytesCorrectly`
-- [ ] Write failing test: `TestProgressReader_DoesNotPrintMoreFrequentlyThan256KB`
-- [ ] Implement `progressReader` in `internal/archive/archive.go`
-- [ ] Wire into the HTTP download path in `Archive.Extract`
-- [ ] All tests pass (use a `bytes.Buffer` as the underlying reader in tests; no network required)
-- [ ] Mark Complete, move to `prds/done/`
+- [x] Write failing test: `TestProgressReader_CountsBytesCorrectly`
+- [x] Write failing test: `TestProgressReader_DoesNotPrintMoreFrequentlyThan256KB`
+- [x] Implement `progressReader` in `internal/archive/archive.go`
+- [x] Wire into the HTTP download path in `Archive.Extract`
+- [x] All tests pass (use a `bytes.Buffer` as the underlying reader in tests; no network required)
+- [x] Mark Complete, move to `prds/done/`
 
 ## 5. Technical Notes
 
