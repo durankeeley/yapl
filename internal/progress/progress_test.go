@@ -136,3 +136,37 @@ func TestPrinter(t *testing.T) {
 		}
 	})
 }
+
+func TestWriter(t *testing.T) {
+	t.Run("given writes through a progress writer when finished then bytes pass through and a complete update is reported", func(t *testing.T) {
+		// Given
+		var sink bytes.Buffer
+		updates, report := collect()
+		w := NewWriter(&sink, "proton", -1, report)
+
+		// When
+		for i := 0; i < 3; i++ {
+			w.Write(make([]byte, ReportStep))
+		}
+		w.Finish()
+
+		// Then
+		if sink.Len() != 3*ReportStep {
+			t.Fatalf("passed through %d bytes", sink.Len())
+		}
+		last := (*updates)[len(*updates)-1]
+		if len(*updates) < 3 || !last.Complete || last.Done != 3*ReportStep || last.Total != -1 {
+			t.Fatalf("updates = %+v", *updates)
+		}
+	})
+
+	t.Run("given a nil report function then writing still works", func(t *testing.T) {
+		var sink bytes.Buffer
+		w := NewWriter(&sink, "x", 1, nil)
+		w.Write([]byte("a"))
+		w.Finish()
+		if sink.String() != "a" {
+			t.Fatal("bytes not passed through")
+		}
+	})
+}

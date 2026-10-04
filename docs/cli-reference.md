@@ -213,6 +213,7 @@ Serves packages from <path>/games and <path>/apps over the v1 HTTP API (plus the
 
 | Flag | Description | Default |
 |------|-------------|---------|
+| `--allow-push` | Accept uploads from 'yapl push'. Combine with --auth password on shared networks. |  |
 | `--auth <mode>` | Auth mode: open or password. | `open` |
 | `--packages-dir <path>` | Directory containing packaged archives (path, required). |  |
 | `--password <string>` | Password for password auth. |  |
@@ -220,7 +221,7 @@ Serves packages from <path>/games and <path>/apps over the v1 HTTP API (plus the
 
 ```bash
 yapl serve --packages-dir /srv/games
-yapl serve --packages-dir /srv/games --auth password --password lanparty
+yapl serve --packages-dir /srv/games --auth password --password lanparty --allow-push
 ```
 
 ## `yapl pull`
@@ -245,5 +246,30 @@ Without --server, YAPL listens for a server's LAN broadcast.
 yapl pull list
 yapl pull "Doom"
 yapl pull --server 192.168.1.10:8471 "Doom"
+```
+
+## `yapl push`
+
+Publish a game or app to a YAPL server
+
+```
+yapl push <name> [flags]
+```
+
+Packages the game, uploads every component (Proton, runtime, DXVK, VKD3D, umu-launcher) the server doesn't have yet, then uploads the package as <name>:<version>. Published versions are immutable; bump --version to publish again. The server must run with --allow-push.
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--auth <mode>` | Auth mode: open or password. | `open` |
+| `--config <file>` | Config file name inside the game directory (default game.json or app.json). |  |
+| `--format <format>` | Compression format for the package: gz, xz, zst. | `zst` |
+| `--password <string>` | Password for password auth. |  |
+| `--port <port>` | UDP port to listen on for discovery. | `8471` |
+| `--server <address>` | Server address (host:port or URL). Auto-discovered when omitted. |  |
+| `--version <version>` | Package version (MAJOR.MINOR.PATCH); defaults to metadata.json's. |  |
+
+```bash
+yapl push "Doom" --version 1.0.0
+yapl push "Doom" --version 1.1.0 --server 192.168.1.10:8471 --auth password --password lanparty
 ```
 

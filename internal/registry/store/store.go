@@ -28,7 +28,8 @@ import (
 )
 
 const (
-	ManifestFile = "manifest.json"
+	ManifestFile  = "manifest.json"
+	ComponentsDir = "components"
 	// LatestTag resolves to the highest version of a package.
 	LatestTag = "latest"
 	// LegacyVersion is reported for flat archives that have no sidecar.
@@ -67,6 +68,12 @@ type Summary struct {
 	HasCover    bool     `json:"has_cover"`
 }
 
+// ComponentVersion is one stored component.
+type ComponentVersion struct {
+	Manifest    manifest.ComponentManifest
+	ArchivePath string
+}
+
 type entry struct {
 	kind     string
 	versions map[string]*Version
@@ -74,16 +81,17 @@ type entry struct {
 
 // Store is a concurrency-safe index of a packages directory.
 type Store struct {
-	root     string
-	warnings io.Writer
-	mu       sync.RWMutex
-	packages map[string]*entry
+	root       string
+	warnings   io.Writer
+	mu         sync.RWMutex
+	packages   map[string]*entry
+	components map[string]*ComponentVersion
 }
 
 // New creates a store over root. Problems found while scanning (invalid
 // manifests, name collisions) are written to warnings.
 func New(root string, warnings io.Writer) *Store {
-	return &Store{root: root, warnings: warnings, packages: map[string]*entry{}}
+	return &Store{root: root, warnings: warnings, packages: map[string]*entry{}, components: map[string]*ComponentVersion{}}
 }
 
 // Root is the directory the store indexes.
@@ -130,10 +138,70 @@ func (s *Store) Refresh() error {
 			}
 		}
 	}
+	components := s.scanComponents()
 	s.mu.Lock()
 	s.packages = next
+	s.components = components
 	s.mu.Unlock()
 	return nil
+}
+
+func (s *Store) scanComponents() map[string]*ComponentVersion {
+	out := map[string]*ComponentVersion{}
+	for _, kind := range manifest.ComponentKinds {
+		kindDir := filepath.Join(s.root, ComponentsDir, kind)
+		versions, err := os.ReadDir(kindDir)
+		if err != nil {
+			continue
+		}
+		for _, vd := range versions {
+			if !vd.IsDir() || strings.HasPrefix(vd.Name(), ".") {
+				continue
+			}
+			dir := filepath.Join(kindDir, vd.Name())
+			m, err := manifest.ReadComponent(filepath.Join(dir, ManifestFile))
+			if err == nil && (m.Kind != kind || m.Version != vd.Name()) {
+				err = fmt.Errorf("manifest says %s, directory says %s/%s", m.Component(), kind, vd.Name())
+			}
+			if err != nil {
+				fmt.Fprintf(s.warnings, "warning: skipping %s: %v\n", dir, err)
+				continue
+			}
+			out[m.Component().String()] = &ComponentVersion{Manifest: m, ArchivePath: filepath.Join(dir, manifest.ComponentArchiveFile)}
+		}
+	}
+	return out
+}
+
+// ResolveComponent finds a stored component.
+func (s *Store) ResolveComponent(kind, version string) (*ComponentVersion, error) {
+	if !manifest.ValidComponentKind(kind) || !manifest.ValidName(version) {
+		return nil, ErrInvalidName
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	c, ok := s.components[manifest.Component{Kind: kind, Version: version}.String()]
+	if !ok {
+		return nil, fmt.Errorf("component %s/%s: %w", kind, version, ErrNotFound)
+	}
+	return c, nil
+}
+
+// Components lists every stored component, sorted by kind then version.
+func (s *Store) Components() []manifest.ComponentManifest {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]manifest.ComponentManifest, 0, len(s.components))
+	for _, c := range s.components {
+		out = append(out, c.Manifest)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Kind != out[j].Kind {
+			return out[i].Kind < out[j].Kind
+		}
+		return version.Compare(out[i].Version, out[j].Version) < 0
+	})
+	return out
 }
 
 func (s *Store) scanVersioned(typeDir, name, kind string) []*Version {

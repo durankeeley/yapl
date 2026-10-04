@@ -598,3 +598,45 @@ func TestMergeGlobal_KeepsLocalDefaults(t *testing.T) {
 		}
 	})
 }
+
+func TestVersionInfoFor(t *testing.T) {
+	g := Global{
+		ProtonVersions:     map[string]VersionInfo{"ge": {BinPath: "p"}},
+		RuntimeVersions:    map[string]VersionInfo{"sniper": {BinPath: "r"}},
+		DependencyVersions: map[string]map[string]VersionInfo{"dxvk": {"3.1.1": {BinPath: "d"}}},
+	}
+	tests := []struct {
+		name, kind, version, wantBin string
+		wantOK                       bool
+	}{
+		{"given a proton version then its proton entry is returned", "proton", "ge", "p", true},
+		{"given a runtime version then its runtime entry is returned", "runtime", "sniper", "r", true},
+		{"given a dependency version then its dependency entry is returned", "dxvk", "3.1.1", "d", true},
+		{"given an unknown version then nothing is found", "dxvk", "9", "", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			v, ok := g.VersionInfoFor(tc.kind, tc.version)
+			if ok != tc.wantOK || v.BinPath != tc.wantBin {
+				t.Fatalf("got %+v, %v", v, ok)
+			}
+		})
+	}
+}
+
+func TestRegister(t *testing.T) {
+	t.Run("given an empty config when components are registered then each lands in its section", func(t *testing.T) {
+		// Given
+		var g Global
+
+		// When
+		g.Register("proton", "ge", VersionInfo{URL: "p"})
+		g.Register("runtime", "sniper", VersionInfo{URL: "r"})
+		g.Register("dxvk", "3.1.1", VersionInfo{URL: "d"})
+
+		// Then
+		if g.ProtonVersions["ge"].URL != "p" || g.RuntimeVersions["sniper"].URL != "r" || g.DependencyVersions["dxvk"]["3.1.1"].URL != "d" {
+			t.Fatalf("config = %+v", g)
+		}
+	})
+}

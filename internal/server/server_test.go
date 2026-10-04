@@ -133,3 +133,22 @@ func TestBroadcastTo(t *testing.T) {
 		}
 	})
 }
+
+func TestAllowPush(t *testing.T) {
+	t.Run("given push enabled with open auth when the server starts then it warns", func(t *testing.T) {
+		var warnings strings.Builder
+		if _, err := server.New(server.Config{PackagesDir: t.TempDir(), Auth: "open", AllowPush: true, Warnings: &warnings}); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(warnings.String(), "anyone on the LAN can publish") {
+			t.Fatalf("warnings = %q", warnings.String())
+		}
+	})
+	t.Run("given push enabled with a password when the server starts then it does not warn", func(t *testing.T) {
+		var warnings strings.Builder
+		server.New(server.Config{PackagesDir: t.TempDir(), Auth: "password", Password: "x", AllowPush: true, Warnings: &warnings})
+		if warnings.Len() != 0 {
+			t.Fatalf("warnings = %q", warnings.String())
+		}
+	})
+}

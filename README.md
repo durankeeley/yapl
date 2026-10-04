@@ -210,9 +210,37 @@ The server rescans the directory every 30 seconds, so new packages show up witho
 | GET | `/v1/packages/{name}/{version}/manifest` | One manifest. `latest` resolves to the highest version. |
 | GET | `/v1/packages/{name}/{version}/archive` | The archive, with the `X-Yapl-SHA256` header. Supports `Range`. |
 | GET | `/v1/packages/{name}/{version}/cover` | Cover image |
+| GET | `/v1/components` | Every stored component (Proton builds, runtimes, DXVK, VKD3D, umu-launcher) |
+| GET/HEAD | `/v1/components/{kind}/{version}/manifest` | A component's manifest (`HEAD` checks existence) |
+| GET | `/v1/components/{kind}/{version}/archive` | The component archive (`.tar.zst`) |
+| PUT | `/v1/packages/{name}/{version}` | Upload a package (multipart: `archive`, `cover`, `manifest`). Needs `--allow-push`. |
+| PUT | `/v1/components/{kind}/{version}` | Upload a component (multipart: `archive`, `manifest`). Needs `--allow-push`. |
 | GET | `/packages`, `/packages/{name}` | Legacy endpoints for older YAPL clients (latest version only) |
 
 Names and versions that aren't safe path segments (`..`, `/`, a leading `.`) are rejected with `400`.
+
+### `push` — publish to a LAN registry
+
+`push` is YAPL's `docker push`. It packages the game, uploads any **components** the server doesn't have yet, then uploads the game as `<name>:<version>`:
+
+```bash
+# on the server
+./yapl serve --packages-dir /srv/games --auth password --password lanparty --allow-push
+
+# on the machine where you set the game up
+./yapl push "Doom" --version 1.0.0 --server 192.168.1.10:8471 --auth password --password lanparty
+# -> Uploading component proton/GE-Proton11-7 from proton/GE-Proton11-7
+# -> Server already has runtime/sniper
+# -> Uploading Doom:1.0.0
+# ✅ Published Doom:1.0.0 (1 components uploaded, 1 already on the server)
+```
+
+Components are shared layers: Proton builds, Steam runtimes, DXVK, VKD3D and umu-launcher are stored once under `components/<kind>/<version>/`, however many games use them. Ten games on GE-Proton11-7 store and transfer that build once instead of ten times, which `--bundle-deps` can't do.
+
+* Published versions can't be changed. Pushing `Doom:1.0.0` again fails, so bump `--version`.
+* The server hashes every upload and rejects it if the SHA-256 doesn't match the manifest. Half-finished uploads are never visible.
+* `push` packages with `zstd` by default, which compresses multi-GB games much faster than `xz`. Use `--format` to change it.
+* Push is off unless the server runs with `--allow-push`. With `--auth open` the server warns that anyone on the LAN can publish.
 
 ### `pull` — download a game from a YAPL server
 

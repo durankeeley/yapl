@@ -312,6 +312,38 @@ func extractTar(r io.Reader, destPath string, stripTopLevelDir bool) error {
 	}
 }
 
+// Write streams a compressed tar of walkDir to w, with entry names relative
+// to baseDir. Components are pushed this way, without a temporary file.
+func Write(w io.Writer, walkDir, baseDir, format string) error {
+	return writeCompressed(w, walkDir, baseDir, format, "")
+}
+
+func writeCompressed(w io.Writer, walkDir, baseDir, format, skip string) error {
+	var compressor io.WriteCloser
+	var err error
+	switch format {
+	case "gz":
+		compressor = gzip.NewWriter(w)
+	case "xz":
+		compressor, err = xz.NewWriter(w)
+	case "zst":
+		compressor, err = zstd.NewWriter(w)
+	default:
+		return fmt.Errorf("unsupported package format: %s. Use 'gz', 'xz', or 'zst'", format)
+	}
+	if err != nil {
+		return fmt.Errorf("create %s writer: %w", format, err)
+	}
+	tw := tar.NewWriter(compressor)
+	walkErr := writeTree(tw, walkDir, baseDir, skip)
+	for _, closeErr := range []error{tw.Close(), compressor.Close()} {
+		if walkErr == nil {
+			walkErr = closeErr
+		}
+	}
+	return walkErr
+}
+
 // createBundle writes the archive, hashing and counting the compressed bytes
 // as they are written so the file never needs re-reading.
 func createBundle(bundlePath, walkDir, baseDir, format string) (sha string, size int64, err error) {
@@ -321,32 +353,13 @@ func createBundle(bundlePath, walkDir, baseDir, format string) (sha string, size
 	}
 	hasher := sha256.New()
 	counter := &countingWriter{}
-	sink := io.MultiWriter(f, hasher, counter)
-
-	var compressor io.WriteCloser
-	switch format {
-	case "gz":
-		compressor = gzip.NewWriter(sink)
-	case "xz":
-		compressor, err = xz.NewWriter(sink)
-	case "zst":
-		compressor, err = zstd.NewWriter(sink)
+	writeErr := writeCompressed(io.MultiWriter(f, hasher, counter), walkDir, baseDir, format, bundlePath)
+	if closeErr := f.Close(); writeErr == nil {
+		writeErr = closeErr
 	}
-	if err != nil {
-		f.Close()
-		return "", 0, fmt.Errorf("create %s writer: %w", format, err)
-	}
-
-	tw := tar.NewWriter(compressor)
-	walkErr := writeTree(tw, walkDir, baseDir, bundlePath)
-	for _, closeErr := range []error{tw.Close(), compressor.Close(), f.Close()} {
-		if walkErr == nil {
-			walkErr = closeErr
-		}
-	}
-	if walkErr != nil {
+	if writeErr != nil {
 		os.Remove(bundlePath)
-		return "", 0, walkErr
+		return "", 0, writeErr
 	}
 	return hex.EncodeToString(hasher.Sum(nil)), counter.n, nil
 }

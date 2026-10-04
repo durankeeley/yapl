@@ -209,6 +209,12 @@ Indexes a packages directory: versioned packages (`games/<name>/<version>/manife
 ### `internal/registry/api/`
 The HTTP layer over the store: the `/v1/...` routes (Go 1.22 `ServeMux` patterns), the legacy `/packages` routes, Basic-auth for everything except `/v1/info`, and JSON errors (`400` invalid name, `404` not found). Archives are served with `http.ServeContent`, so `Range` requests work, and they carry the `X-Yapl-SHA256` header.
 
+### Uploads (`internal/registry/store/upload.go`, `internal/registry/api/push.go`)
+An upload is staged in `<root>/.uploads/upload-*`. The archive part is hashed as it streams in. `CommitPackage`/`CommitComponent` validate the manifest against the URL, compare SHA-256 and size, then rename the staging directory to `games/<name>/<version>` or `components/<kind>/<version>` in one step. A rename onto an existing version fails, which keeps versions immutable. Clients send the manifest part last so `client.PushComponent` can stream-pack a component (`archive.Write`) and include the checksum it computed on the way.
+
+### `internal/publish/`
+`yapl push`: checks `/v1/info` (API version, `push_enabled`), packages into a temp directory, uploads each missing component (from `proton/<v>`, `dependencies/<kind>/<v>`, or a custom `path`, with machine-specific fields stripped by `manifest.PortableVersionInfo`), then the package.
+
 ### `internal/server/server.go`
 Composes store + API, rescans every `defaults.ManifestRefreshInterval` and broadcasts `YAPL:<port>` every `defaults.BroadcastInterval`. The `serve` command passes the kernel and module versions in for `/v1/info`.
 

@@ -121,3 +121,39 @@ func describe(u Update) string {
 	}
 	return fmt.Sprintf("%.1f MB downloaded", done)
 }
+
+// Writer counts bytes written through it and reports them; call Finish when
+// the stream ends to send the final update.
+type Writer struct {
+	w            io.Writer
+	label        string
+	total        int64
+	done         int64
+	lastReported int64
+	report       Func
+}
+
+// NewWriter wraps w. A nil report function disables reporting.
+func NewWriter(w io.Writer, label string, total int64, report Func) *Writer {
+	return &Writer{w: w, label: label, total: total, report: report, lastReported: -ReportStep}
+}
+
+func (p *Writer) Write(b []byte) (int, error) {
+	n, err := p.w.Write(b)
+	p.done += int64(n)
+	if p.report != nil && p.done-p.lastReported >= ReportStep {
+		p.lastReported = p.done
+		p.report(Update{Label: p.label, Done: p.done, Total: p.total})
+	}
+	return n, err
+}
+
+// Written returns the number of bytes written so far.
+func (p *Writer) Written() int64 { return p.done }
+
+// Finish reports completion.
+func (p *Writer) Finish() {
+	if p.report != nil {
+		p.report(Update{Label: p.label, Done: p.done, Total: p.total, Complete: true})
+	}
+}

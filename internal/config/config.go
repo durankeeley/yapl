@@ -291,3 +291,42 @@ func writeJSONFile(path string, v interface{}) error {
 	}
 	return os.WriteFile(path, data, 0644)
 }
+
+// VersionInfoFor looks up a component's runner.json entry by kind.
+func (g Global) VersionInfoFor(kind, version string) (VersionInfo, bool) {
+	var v VersionInfo
+	var ok bool
+	switch kind {
+	case paths.KindProton:
+		v, ok = g.ProtonVersions[version]
+	case paths.KindRuntime:
+		v, ok = g.RuntimeVersions[version]
+	default:
+		v, ok = g.DependencyVersions[kind][version]
+	}
+	return v, ok
+}
+
+// Register adds or replaces a component's runner.json entry.
+func (g *Global) Register(kind, version string, v VersionInfo) {
+	switch kind {
+	case paths.KindProton:
+		if g.ProtonVersions == nil {
+			g.ProtonVersions = map[string]VersionInfo{}
+		}
+		g.ProtonVersions[version] = v
+	case paths.KindRuntime:
+		if g.RuntimeVersions == nil {
+			g.RuntimeVersions = map[string]VersionInfo{}
+		}
+		g.RuntimeVersions[version] = v
+	default:
+		if g.DependencyVersions == nil {
+			g.DependencyVersions = map[string]map[string]VersionInfo{}
+		}
+		if g.DependencyVersions[kind] == nil {
+			g.DependencyVersions[kind] = map[string]VersionInfo{}
+		}
+		g.DependencyVersions[kind][version] = v
+	}
+}

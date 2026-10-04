@@ -64,10 +64,11 @@ type legacyEntry struct {
 
 // Config wires a store to the HTTP layer.
 type Config struct {
-	Store    *store.Store
-	Info     Info
-	Auth     string
-	Password string
+	Store     *store.Store
+	Info      Info
+	Auth      string
+	Password  string
+	AllowPush bool
 }
 
 type handler struct {
@@ -78,6 +79,7 @@ type handler struct {
 func New(cfg Config) http.Handler {
 	cfg.Info.APIVersion = APIVersion
 	cfg.Info.Auth = cfg.Auth
+	cfg.Info.PushEnabled = cfg.AllowPush
 	h := &handler{cfg: cfg}
 
 	protected := http.NewServeMux()
@@ -86,6 +88,11 @@ func New(cfg Config) http.Handler {
 	protected.HandleFunc("GET /v1/packages/{name}/{version}/manifest", h.manifest)
 	protected.HandleFunc("GET /v1/packages/{name}/{version}/archive", h.archive)
 	protected.HandleFunc("GET /v1/packages/{name}/{version}/cover", h.cover)
+	protected.HandleFunc("PUT /v1/packages/{name}/{version}", h.pushPackage)
+	protected.HandleFunc("GET /v1/components", h.components)
+	protected.HandleFunc("GET /v1/components/{kind}/{version}/manifest", h.componentManifest)
+	protected.HandleFunc("GET /v1/components/{kind}/{version}/archive", h.componentArchive)
+	protected.HandleFunc("PUT /v1/components/{kind}/{version}", h.pushComponent)
 	protected.HandleFunc("GET /packages", h.legacyList)
 	protected.HandleFunc("GET /packages/{name}", h.legacyDownload)
 

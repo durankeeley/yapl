@@ -1,6 +1,6 @@
 # PRD-43 - Shared Component Layers and `yapl push`
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** L
 **Sprint:** Phase 2 — Registry server
@@ -41,15 +41,15 @@ components/<kind>/<version>/manifest.json   {kind, version, sha256, size, versio
 * An existing version is immutable: 409 Conflict.
 
 ### `yapl push <name> [--server] [--version]`
-* Runs `package` into a temp dir (or uses `--archive <path>` with its sidecar), checks `/v1/components/.../manifest` for each component, packs and uploads only the missing ones (tar.zst, streamed through `io.Pipe`, never fully in memory), then uploads the package.
+* Runs `package` into a temp dir (`--format` defaults to `zst` for speed), checks `/v1/components/.../manifest` for each component, packs and uploads only the missing ones (tar.zst, streamed through `io.Pipe`, never fully in memory), then uploads the package.
 * Progress uses `internal/progress`.
 
 ## 4. Execution & Milestones
 
-- [ ] Component store + API + tests.
-- [ ] Multipart upload handlers with verify-then-rename + tests (checksum mismatch, conflict, push disabled).
-- [ ] Client `PushPackage` / `PushComponent` streaming + tests against `httptest`.
-- [ ] `push` command, README "Publishing to the server" section.
+- [x] Component store + API + tests.
+- [x] Multipart upload handlers with verify-then-rename + tests (checksum mismatch, conflict, push disabled).
+- [x] Client `PushPackage` / `PushComponent` streaming + tests against `httptest`.
+- [x] `push` command, README "Publishing to the server" section.
 
 ### Acceptance scenarios
 * **Given** a server that already has `proton/GE-Proton11-7` **when** I push a second game using it **then** only the game archive is uploaded.

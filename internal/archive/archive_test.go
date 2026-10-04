@@ -2,6 +2,7 @@ package archive
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -609,5 +610,40 @@ func TestPackage_UnknownFormatWritesNothing(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(out); len(entries) != 0 {
 		t.Fatalf("output dir not empty: %v", entries)
+	}
+}
+
+func TestWrite_StreamsAnExtractableArchive(t *testing.T) {
+	// Given a component directory
+	src := t.TempDir()
+	os.MkdirAll(filepath.Join(src, "files", "bin"), 0755)
+	os.WriteFile(filepath.Join(src, "files", "bin", "wine64"), []byte("wine"), 0755)
+	os.Symlink("wine64", filepath.Join(src, "files", "bin", "wine"))
+
+	// When it is streamed with names relative to itself
+	var buf bytes.Buffer
+	if err := Write(&buf, src, src, "zst"); err != nil {
+		t.Fatal(err)
+	}
+	archivePath := filepath.Join(t.TempDir(), "component.tar.zst")
+	os.WriteFile(archivePath, buf.Bytes(), 0644)
+	dest := t.TempDir()
+	if err := (&Archive{Source: archivePath}).Extract(dest, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Then the tree, file modes and symlinks are reproduced at the destination root
+	info, err := os.Stat(filepath.Join(dest, "files", "bin", "wine64"))
+	if err != nil || info.Mode()&0100 == 0 {
+		t.Fatalf("wine64 missing or not executable: %v", err)
+	}
+	if target, err := os.Readlink(filepath.Join(dest, "files", "bin", "wine")); err != nil || target != "wine64" {
+		t.Fatalf("symlink = %q, %v", target, err)
+	}
+}
+
+func TestWrite_UnknownFormat(t *testing.T) {
+	if err := Write(&bytes.Buffer{}, t.TempDir(), t.TempDir(), "rar"); err == nil {
+		t.Fatal("expected an error for an unknown format")
 	}
 }

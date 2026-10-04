@@ -197,3 +197,83 @@ func TestSidecarPaths(t *testing.T) {
 		t.Fatalf("cover sidecar = %q", got)
 	}
 }
+
+func validComponent() ComponentManifest {
+	return ComponentManifest{
+		SchemaVersion: SchemaVersion,
+		Kind:          "proton",
+		Version:       "GE-Proton11-7",
+		Archive:       Archive{File: ComponentArchiveFile, Format: "zst", SHA256: strings.Repeat("b", 64), SizeBytes: 100},
+		VersionInfo:   config.VersionInfo{BinPath: "files/bin"},
+	}
+}
+
+func TestComponentManifest_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(*ComponentManifest)
+		wantErr string
+	}{
+		{"given a complete component manifest then it is valid", func(*ComponentManifest) {}, ""},
+		{"given an unknown kind then it is rejected", func(m *ComponentManifest) { m.Kind = "drivers" }, "kind"},
+		{"given an unsafe version then it is rejected", func(m *ComponentManifest) { m.Version = "../x" }, "version"},
+		{"given no checksum then it is rejected because components are always pushed", func(m *ComponentManifest) { m.Archive.SHA256 = "" }, "sha256"},
+		{"given a newer schema then it is rejected", func(m *ComponentManifest) { m.SchemaVersion = SchemaVersion + 1 }, "schema"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := validComponent()
+			tc.mutate(&m)
+			err := m.Validate()
+			if tc.wantErr == "" && err != nil || tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("error = %v, want %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestPortableVersionInfo(t *testing.T) {
+	t.Run("given a machine-specific version entry then url, path and update checks are stripped", func(t *testing.T) {
+		// Given
+		in := config.VersionInfo{URL: "https://x", Path: "/home/me/proton", BinPath: "files/bin", CheckForUpdates: true, LDLibraryPathComponents: []string{"lib"}}
+
+		// When
+		out := PortableVersionInfo(in)
+
+		// Then
+		if out.URL != "" || out.Path != "" || out.CheckForUpdates || out.BinPath != "files/bin" || out.LDLibraryPathComponents[0] != "lib" {
+			t.Fatalf("portable = %+v", out)
+		}
+	})
+}
+
+func TestComponentKinds(t *testing.T) {
+	for _, k := range []string{"proton", "runtime", "dxvk", "vkd3d", "umu-launcher"} {
+		if !ValidComponentKind(k) {
+			t.Errorf("given %s then it is a component kind", k)
+		}
+	}
+	if ValidComponentKind("game") {
+		t.Error("given game then it is not a component kind")
+	}
+}
+
+func TestComponentReadWrite(t *testing.T) {
+	t.Run("given a component manifest when written and read then it round trips", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "manifest.json")
+		if err := WriteComponent(path, validComponent()); err != nil {
+			t.Fatal(err)
+		}
+		got, err := ReadComponent(path)
+		if err != nil || got.Version != "GE-Proton11-7" || got.VersionInfo.BinPath != "files/bin" {
+			t.Fatalf("got %+v, %v", got, err)
+		}
+	})
+	t.Run("given a malformed component manifest then reading fails", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "manifest.json")
+		os.WriteFile(path, []byte("{"), 0644)
+		if _, err := ReadComponent(path); err == nil {
+			t.Fatal("expected an error")
+		}
+	})
+}

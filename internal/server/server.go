@@ -27,6 +27,8 @@ type Config struct {
 	// Kernel and Modules are advertised at /v1/info.
 	Kernel  string
 	Modules map[string]string
+	// AllowPush enables uploads (yapl push).
+	AllowPush bool
 	// Warnings receives scan problems; nil means stderr.
 	Warnings io.Writer
 }
@@ -54,11 +56,15 @@ func New(cfg Config) (*Server, error) {
 	if err := st.Refresh(); err != nil {
 		return nil, fmt.Errorf("scan %s: %w", cfg.PackagesDir, err)
 	}
+	if cfg.AllowPush && cfg.Auth == api.AuthOpen {
+		fmt.Fprintln(cfg.Warnings, "warning: push is enabled without a password; anyone on the LAN can publish packages")
+	}
 	h := api.New(api.Config{
-		Store:    st,
-		Auth:     cfg.Auth,
-		Password: cfg.Password,
-		Info:     api.Info{Kernel: cfg.Kernel, Modules: cfg.Modules},
+		Store:     st,
+		Auth:      cfg.Auth,
+		Password:  cfg.Password,
+		AllowPush: cfg.AllowPush,
+		Info:      api.Info{Kernel: cfg.Kernel, Modules: cfg.Modules},
 	})
 	return &Server{cfg: cfg, store: st, handler: h}, nil
 }
