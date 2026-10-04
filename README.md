@@ -301,6 +301,33 @@ Some games need a helper process running before they start, such as a LAN relay 
 
 ---
 
+### Config validation
+
+`setup`, `run` and `package` check `game.json` before doing any work and report every problem at once:
+
+* `proton_version` and `executable` are required.
+* `launch_method` must be `direct`, `container` or `umu`; when it's omitted, `container` is assumed, and `container` needs `runtime_version`.
+* `dependencies.dxvk_directx_version` must be `"9"`, `"10"` or `"11"` when set.
+
+### Installing DXVK DLLs next to the game
+
+Some old games load `d3d9.dll`/`d3d11.dll` from their own folder instead of the system. Set `dxvk_mode` to `custom` and YAPL copies the right DXVK DLLs (and VKD3D's `d3d12.dll` when `vkd3d_install_path` is set) into that folder during `setup`:
+
+```json
+"dependencies": {
+  "dxvk_version": "3.1.1",
+  "dxvk_mode": "custom",
+  "dxvk_directx_version": "9",
+  "dxvk_install_path": "Games/Need for Speed"
+}
+```
+
+| `dxvk_directx_version` | DLLs copied |
+|---|---|
+| `9`  | `d3d9.dll` |
+| `10` | `d3d10.dll`, `d3d10_1.dll`, `d3d10core.dll`, `d3d11.dll`, `dxgi.dll` |
+| `11` | `d3d11.dll`, `dxgi.dll` |
+
 ## Running from anywhere — `--workdir` and `YAPL_HOME`
 
 YAPL treats a folder as a *library*: `runner.json`, `proton/`, `dependencies/`, `games/` and `apps/` all live in it. By default the library is the current directory. To use one from anywhere (scripts, desktop launchers, systemd units), either pass `--workdir` **before** the command or set `YAPL_HOME`. The flag wins when both are set.

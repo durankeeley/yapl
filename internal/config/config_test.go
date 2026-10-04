@@ -482,3 +482,51 @@ func TestLoadGlobal_MissingFileReturnsNotExist(t *testing.T) {
 		t.Fatalf("expected not-exist error, got %v", err)
 	}
 }
+
+func TestValidateApp_DXVKDirectXVersion(t *testing.T) {
+	base := App{ProtonVersion: "ge", LaunchMethod: "direct", Executable: "drive_c/game.exe"}
+	tests := []struct {
+		name    string
+		version string
+		wantErr string
+	}{
+		{"given directx version 9 then the config is valid", "9", ""},
+		{"given directx version 10 then the config is valid", "10", ""},
+		{"given directx version 11 then the config is valid", "11", ""},
+		{"given no directx version then the config is valid", "", ""},
+		{"given directx version 12 then it is rejected naming the valid values", "12", `dxvk_directx_version must be "9", "10", or "11" (got "12")`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Given
+			cfg := base
+			cfg.Dependencies.DXVKDirectXVersion = tc.version
+
+			// When
+			err := ValidateApp(cfg)
+
+			// Then
+			if tc.wantErr == "" && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("error = %v, want %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateApp_EmptyLaunchMethodMeansDefault(t *testing.T) {
+	t.Run("given no launch method and a runtime then the config is valid as container", func(t *testing.T) {
+		cfg := App{ProtonVersion: "ge", Executable: "x.exe", RuntimeVersion: "sniper"}
+		if err := ValidateApp(cfg); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+	t.Run("given no launch method and no runtime then the container runtime requirement applies", func(t *testing.T) {
+		cfg := App{ProtonVersion: "ge", Executable: "x.exe"}
+		if err := ValidateApp(cfg); err == nil || !strings.Contains(err.Error(), "runtime_version is required") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+}

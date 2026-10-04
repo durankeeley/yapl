@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -64,6 +65,9 @@ type App struct {
 	BackgroundServiceDelayMs int      `json:"background_service_delay_ms,omitempty"`
 }
 
+// DXVKDirectXVersions lists the accepted dxvk_directx_version values.
+var DXVKDirectXVersions = []string{"9", "10", "11"}
+
 // ValidateApp checks that cfg contains all required fields before any command runs.
 // All violations are collected and returned as a single error.
 func ValidateApp(cfg App) error {
@@ -76,15 +80,22 @@ func ValidateApp(cfg App) error {
 		errs = append(errs, "executable is required")
 	}
 
-	switch cfg.LaunchMethod {
+	method := cfg.LaunchMethod
+	if method == "" {
+		method = defaults.LaunchMethod
+	}
+	switch method {
 	case "direct", "umu":
-		// valid, no extra requirements
 	case "container":
 		if cfg.RuntimeVersion == "" {
 			errs = append(errs, "runtime_version is required when launch_method is container")
 		}
 	default:
-		errs = append(errs, "launch_method must be one of direct, container, umu")
+		errs = append(errs, "launch_method must be one of "+strings.Join(defaults.LaunchMethods, ", "))
+	}
+
+	if v := cfg.Dependencies.DXVKDirectXVersion; v != "" && !slices.Contains(DXVKDirectXVersions, v) {
+		errs = append(errs, fmt.Sprintf(`dxvk_directx_version must be "9", "10", or "11" (got %q)`, v))
 	}
 
 	if len(errs) == 0 {

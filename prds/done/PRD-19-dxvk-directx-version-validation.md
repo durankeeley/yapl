@@ -1,6 +1,6 @@
 # PRD-19 - Validate DXVKDirectXVersion Config Field
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** Medium
 **Size:** S
 **Sprint:** Phase 1 — Out-of-the-box foundation
@@ -44,12 +44,12 @@ If a user sets `dxvk_directx_version` to any value other than `"9"`, `"10"`, or 
 
 ## 4. Execution & Milestones
 
-- [ ] Write failing test: `TestInstallCustomComponents_ErrorsOnUnknownDXVKDirectXVersion`
-- [ ] Write failing test: `TestInstallCustomComponents_NoopWhenVersionEmpty`
-- [ ] Add validation to `InstallCustomComponents` for unknown DirectX version
-- [ ] Add to `config.ValidateApp` (coordinate with PRD-8)
-- [ ] All tests pass
-- [ ] Mark Complete, move to `prds/done/`
+- [x] Write failing test: `TestInstallCustomComponents_ErrorsOnUnknownDXVKDirectXVersion`
+- [x] Write failing test: `TestInstallCustomComponents_NoopWhenVersionEmpty`
+- [x] Add validation to `InstallCustomComponents` for unknown DirectX version
+- [x] Add to `config.ValidateApp` (coordinate with PRD-8)
+- [x] All tests pass
+- [x] Mark Complete, move to `prds/done/`
 
 ## 5. Technical Notes
 

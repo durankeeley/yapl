@@ -377,3 +377,31 @@ func TestGetInfo_ErrorsForUnknownVersion(t *testing.T) {
 		t.Fatal("expected an error for an unknown version but got nil")
 	}
 }
+
+func TestInstallCustomComponents_DirectXVersionGuard(t *testing.T) {
+	t.Run("given an unknown directx version with an install path then it errors instead of silently skipping", func(t *testing.T) {
+		// Given
+		deps := config.AppDependencies{DXVKVersion: "2.4", DXVKInstallPath: "Games/Doom", DXVKDirectXVersion: "12"}
+
+		// When
+		err := InstallCustomComponents(t.TempDir(), deps)
+
+		// Then
+		if err == nil || !strings.Contains(err.Error(), `unrecognised dxvk_directx_version "12"`) {
+			t.Fatalf("error = %v", err)
+		}
+	})
+
+	t.Run("given no directx version then nothing is installed and no error is returned", func(t *testing.T) {
+		// Given
+		deps := config.AppDependencies{DXVKVersion: "2.4", DXVKInstallPath: "Games/Doom"}
+
+		// When
+		err := InstallCustomComponents(t.TempDir(), deps)
+
+		// Then
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}

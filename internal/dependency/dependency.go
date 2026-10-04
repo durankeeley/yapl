@@ -102,7 +102,11 @@ func InstallCustomComponents(prefixPath string, deps config.AppDependencies) err
 	}
 	vkd3dList := []string{"d3d12.dll", "d3d12core.dll"}
 
-	if err := install(paths.KindDXVK, deps.DXVKVersion, deps.DXVKInstallPath, prefixPath, dxvkMap[deps.DXVKDirectXVersion]); err != nil {
+	dxvkDLLs, known := dxvkMap[deps.DXVKDirectXVersion]
+	if deps.DXVKDirectXVersion != "" && !known {
+		return fmt.Errorf("unrecognised dxvk_directx_version %q; valid values are 9, 10, 11", deps.DXVKDirectXVersion)
+	}
+	if err := install(paths.KindDXVK, deps.DXVKVersion, deps.DXVKInstallPath, prefixPath, dxvkDLLs); err != nil {
 		return err
 	}
 	if err := install(paths.KindVKD3D, deps.VKD3DVersion, deps.VKD3DInstallPath, prefixPath, vkd3dList); err != nil {
