@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
+	"time"
 
 	"yapl/internal/config"
 	"yapl/internal/fs"
@@ -252,6 +254,9 @@ func RunDirectly(prefixPath string, appCfg config.App, globalCfg config.Global, 
 	// cause a protocol version mismatch. Kill it so wine starts a fresh one.
 	killStaleWineserver(protonBasePath, cmd.Env)
 
+	stopServices := launchBackgroundServices(appCfg.BackgroundServices, wineExecutablePath, nil, cmd.Env, absPrefix, backgroundServiceDelay(appCfg))
+	defer stopServices()
+
 	return executeCommand(cmd)
 }
 
@@ -294,18 +299,20 @@ func RunInContainer(prefixPath string, appCfg config.App, globalCfg config.Globa
 	fullExePath := filepath.Join(absPrefix, appCfg.Executable)
 	protonVerb := "waitforexitandrun"
 
-	args := []string{
+	runnerArgs := []string{
 		"--verb=" + protonVerb,
 		"--",
 		shimPath,
 		protonScriptPath,
 		protonVerb,
-		fullExePath,
 	}
-	args = append(args, appCfg.LaunchArgs...)
+	args := append(append(append([]string{}, runnerArgs...), fullExePath), appCfg.LaunchArgs...)
 
 	cmd := exec.Command(entryPointPath, args...)
 	cmd.Env = buildProtonEnv(absPrefix, protonBasePath, appCfg, protonVersionInfo, debug)
+
+	stopServices := launchBackgroundServices(appCfg.BackgroundServices, entryPointPath, runnerArgs, cmd.Env, absPrefix, backgroundServiceDelay(appCfg))
+	defer stopServices()
 
 	return executeCommand(cmd)
 }
@@ -352,6 +359,9 @@ func RunWithUMU(prefixPath string, appCfg config.App, globalCfg config.Global, d
 	if appCfg.UMUOptions.Store != "" {
 		cmd.Env = append(cmd.Env, "STORE="+appCfg.UMUOptions.Store)
 	}
+
+	stopServices := launchBackgroundServices(appCfg.BackgroundServices, umuRunPath, nil, cmd.Env, absPrefix, backgroundServiceDelay(appCfg))
+	defer stopServices()
 
 	return executeCommand(cmd)
 }
@@ -439,6 +449,50 @@ func writeSteamAppID(absPrefix, executable, appID string) error {
 }
 
 // --- Private Helpers ---
+
+// DefaultBackgroundServiceDelayMs gives helper processes time to open their
+// sockets before the main executable starts looking for them.
+const DefaultBackgroundServiceDelayMs = 1000
+
+func backgroundServiceDelay(appCfg config.App) int {
+	if appCfg.BackgroundServiceDelayMs == 0 {
+		return DefaultBackgroundServiceDelayMs
+	}
+	return appCfg.BackgroundServiceDelayMs
+}
+
+// launchBackgroundServices starts each service without waiting for it, sleeps
+// delayMs once if anything started, and returns a function that stops them all.
+func launchBackgroundServices(services []string, runner string, runnerArgs []string, env []string, absPrefix string, delayMs int) func() {
+	var started []*exec.Cmd
+	for _, service := range services {
+		args := append(append([]string{}, runnerArgs...), filepath.Join(absPrefix, service))
+		cmd := exec.Command(runner, args...)
+		cmd.Env = env
+		cmd.Dir = absPrefix
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		// A new process group lets cleanup take down the children Wine spawns too.
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		if err := cmd.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: background service %q failed to start: %v\n", service, err)
+			continue
+		}
+		fmt.Printf("-> Started background service %s (pid %d)\n", service, cmd.Process.Pid)
+		started = append(started, cmd)
+	}
+
+	if len(started) > 0 && delayMs > 0 {
+		time.Sleep(time.Duration(delayMs) * time.Millisecond)
+	}
+
+	return func() {
+		for _, cmd := range started {
+			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			cmd.Wait()
+		}
+	}
+}
 
 func executeCommand(cmd *exec.Cmd) error {
 	cmd.Stdout = os.Stdout

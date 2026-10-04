@@ -1,6 +1,6 @@
 # PRD-33 — Background Services Support
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** Medium
 **Size:** S
 **Sprint:** 3
@@ -70,19 +70,19 @@ Add a `background_services` array to the `App` config (list of Windows executabl
 
 ## 4. Execution & Milestones
 
-- [ ] Add `BackgroundServices []string` and `BackgroundServiceDelayMs int` to `config.App`.
-- [ ] Write failing tests in `internal/command/background_service_linux_test.go` (Linux-specific: uses `syscall.Signal(0)` to verify process liveness):
+- [x] Add `BackgroundServices []string` and `BackgroundServiceDelayMs int` to `config.App`.
+- [x] Write failing tests in `internal/command/background_service_linux_test.go` (Linux-specific: uses `syscall.Signal(0)` to verify process liveness):
   - Empty service list is a no-op: no delay, cleanup is safe to call.
   - A started service is alive (verified via PID) after `launchBackgroundServices` returns.
   - `cleanup()` kills the service process (verified via signal(0) returning error after kill).
   - Multiple services: all are killed by a single `cleanup()` call.
   - Non-existent runner binary: `cmd.Start()` fails, service is skipped, no panic, cleanup is safe.
   - argsPrefix is prepended before the service path: verified by passing a `sh -c` prefix that creates a marker file — proves args arrive in the right order without needing Wine.
-- [ ] Implement `launchBackgroundServices` in `command.go`.
-- [ ] Wire `launchBackgroundServices` + `defer cleanup()` into `RunDirectly`, `RunInContainer`, and `RunWithUMU`.
-- [ ] Run `go test ./...` — all tests pass.
-- [ ] Update `README.md` — document `background_services` and `background_service_delay_ms` config fields with a Starcraft LAN example.
-- [ ] Move PRD to `prds/done/`.
+- [x] Implement `launchBackgroundServices` in `command.go`.
+- [x] Wire `launchBackgroundServices` + `defer cleanup()` into `RunDirectly`, `RunInContainer`, and `RunWithUMU`.
+- [x] Run `go test ./...` — all tests pass.
+- [x] Update `README.md` — document `background_services` and `background_service_delay_ms` config fields with a Starcraft LAN example.
+- [x] Move PRD to `prds/done/`.
 
 ---
 

@@ -55,6 +55,9 @@ type App struct {
 	Dependencies    AppDependencies   `json:"dependencies"`
 	DLLOverrides    map[string]string `json:"dll_overrides"`
 	EnvironmentVars map[string]string `json:"environment_vars"`
+
+	BackgroundServices       []string `json:"background_services,omitempty"`
+	BackgroundServiceDelayMs int      `json:"background_service_delay_ms,omitempty"`
 }
 
 // --- Loading and Saving Logic ---

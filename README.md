@@ -282,6 +282,19 @@ Run a specific config:
 
 `setup` with `--config` will create the named file if it does not exist, using the same defaults as a normal `setup`. The prefix is still initialised in `games/HalfLife/prefix/` regardless of which config file is used.
 
+
+### Background services
+
+Some games need a helper process running before they start, such as a LAN relay for StarCraft Remastered. List these in `background_services`, with paths relative to the prefix like `executable`. YAPL starts each one with the same Wine/Proton environment, waits `background_service_delay_ms` (default `1000`), launches the game, and stops the services when the game exits.
+
+```json
+{
+  "executable": "drive_c/Program Files (x86)/StarCraft/StarCraft.exe",
+  "background_services": ["drive_c/Tools/lan-relay/relay.exe"],
+  "background_service_delay_ms": 2000
+}
+```
+
 ---
 
 ## Flags
