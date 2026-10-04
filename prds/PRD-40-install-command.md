@@ -1,6 +1,6 @@
 # PRD-40 - `yapl install`: Install a Game From an Installer or Folder
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** High
 **Size:** M
 **Sprint:** Phase 1 — Out-of-the-box foundation
