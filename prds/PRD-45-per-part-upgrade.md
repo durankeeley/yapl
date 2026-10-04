@@ -1,6 +1,6 @@
 # PRD-45 - `yapl upgrade`: Upgrade Only the Parts That Changed
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** High
 **Size:** L
 **Sprint:** Phase 2 — Registry server
@@ -20,7 +20,7 @@
 ```
 yapl upgrade                 # show what is outdated: games, yapl itself, catalog
 yapl upgrade "Doom"          # pull the newer Doom; keep saves
-yapl upgrade --all           # every outdated game
+yapl upgrade --all           # every outdated game, plus the catalog
 yapl upgrade self            # replace this binary with the server's newer yapl
 yapl upgrade catalog         # add newer pinned components to runner.json
 ```
@@ -31,16 +31,17 @@ yapl upgrade catalog         # add newer pinned components to runner.json
 * `Plan(local LocalState, remote RemoteState) []Item` — pure function: compares `installed.json` versions to the server catalog, local kernel version to the server's, local catalog version to the compiled-in one. Each item: `{Part, Name, From, To}`. Easy to table-test.
 
 ### Game upgrade
-* Uses PRD-44's verified install into staging. Before the swap, copy preserved paths from the old install into staging: always `prefix/drive_c/users`, `prefix/user.reg`, `prefix/system.reg`, `prefix/userdef.reg`, plus `metadata.preserve` globs (for games that save next to the exe, e.g. Half-Life `cstrike/config.cfg`).
+* Uses PRD-44's verified install into staging. Before the swap, copy preserved paths from the old install into staging: always `prefix/drive_c/users` and `prefix/user.reg` (per-user settings and saves), plus `metadata.preserve` globs relative to the game directory (for games that save next to the exe, e.g. `prefix/drive_c/Games/Half-Life/cstrike/config.cfg`). `system.reg` is **not** preserved: it holds machine-wide install keys a new version may legitimately change.
 * Swap: rename old → `.<Name>.old`, rename staging → `<Name>`, delete old. On failure, restore old.
 * New components the new version needs are pulled; old components are left (another game may use them; `clean` handles removal).
 
 ### Self upgrade
 * Server `GET /v1/yapl/binary` serves its own executable (`os.Executable()`); `/v1/info.kernel` advertises the version.
-* Client downloads to a temp file next to `os.Executable()`, verifies the `X-Yapl-SHA256` header, `chmod 0755`, renames over itself. Only offered when the server's kernel version is newer: YAPL never downgrades itself. `/v1/yapl/binary` is a permanent path, so even a client on an old API version can always fetch a newer binary.
+* Client downloads to a temp file next to `os.Executable()`, verifies the `X-Yapl-SHA256` header, `chmod 0755`, renames over itself.
+* "Newer" is decided per part: the server binary is newer only if no module (or the kernel) is older than the local one and at least one is newer. A divergent build is refused. `/v1/info` also reports `platform` (`linux/amd64`), and a binary for another platform is refused. Only offered when the server's kernel version is newer: YAPL never downgrades itself. `/v1/yapl/binary` is a permanent path, so even a client on an old API version can always fetch a newer binary.
 
 ### Catalog upgrade
-* `MergeGlobal(local, catalog.Default())` and set `defaults` to the catalog's when the user hasn't changed them.
+* `MergeGlobal(local, catalog.Default())`, then set `defaults` and `catalog_version` to the catalog's. Existing games keep the explicit versions in their `game.json`, so only new games pick up the new defaults.
 
 ## 4. Execution & Milestones
 
