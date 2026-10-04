@@ -1,6 +1,6 @@
 # PRD-38 - Microkernel Architecture: Versioned Modules, Scoped Flags, Generated Help
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** L
 **Sprint:** Phase 1 — Out-of-the-box foundation
@@ -53,11 +53,11 @@ cmd/yapl/main.go ── registers ──► kernel ◄── Module{Name, Versio
 
 ## 4. Execution & Milestones
 
-- [ ] `version`, `defaults`, `kernel` packages with Given/When/Then tests.
-- [ ] Modules for existing commands; `main.go` reduced to registration.
-- [ ] Literals replaced with `defaults` constants in server, client, archive.
-- [ ] CLI subprocess tests cover help, version, unknown command, flag scoping.
-- [ ] README "Commands" and "Flags" sections regenerated from `yapl help`; developer guide gains an architecture section.
+- [x] `version`, `defaults`, `kernel` packages with Given/When/Then tests.
+- [x] Modules for existing commands; `main.go` reduced to registration.
+- [x] Literals replaced with `defaults` constants in server, client, archive.
+- [x] CLI subprocess tests cover help, version, unknown command, flag scoping.
+- [x] `docs/cli-reference.md` generated from the registrations with a golden test; README points to it; developer guide gains an architecture section.
 
 ### Acceptance scenarios
 * **Given** the kernel with the lifecycle module **when** I run `yapl help` **then** every registered verb is listed with its summary.

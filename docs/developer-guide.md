@@ -157,8 +157,24 @@ yapl binary → umu-run → proton → game.exe
 
 All the interesting code lives under `internal/`. Here's what each package does:
 
+### Architecture: a microkernel with versioned modules
+
+```
+cmd/yapl/main.go ── registers ──► internal/kernel ◄── Module{Name, Version, Commands}
+                                        │
+              ┌─────────────────────────┼──────────────────────────┐
+   internal/modules/lifecycle   internal/modules/registry   internal/modules/store
+   setup run package unpackage  serve                       pull
+   info list clean
+```
+
+* **`internal/kernel`** owns argument parsing, `help`, `version` and dispatch. Each command gets its own `flag.FlagSet`, so flags are scoped to their command and may appear before or after positional arguments. Usage text, `yapl help` and `docs/cli-reference.md` are all generated from the command registrations.
+* **Modules** (`internal/modules/*`) are thin: they declare commands and flags, validate arguments, and call into the domain packages (`app`, `archive`, `client`, `server`, …). Each has `const Version`; bump it when the module's behaviour changes.
+* **`internal/defaults`** holds every shared tunable (ports, timeouts, intervals, default format and method). Don't write a port or timeout literal anywhere else.
+* **`internal/version`** parses and orders versions (semantic, plus natural order for strings like `GE-Proton11-7`).
+
 ### `cmd/yapl/main.go`
-The front door. It reads the command-line flags (`--game`, `--debug`, etc.) and figures out which command to run. That's all it does. All real work is delegated elsewhere.
+Registers the modules with the kernel and hands it `os.Args`. Nothing else.
 
 ### `internal/app/app.go`
 The coordinator. It holds the loaded config and calls into the other packages in the right order. When you run `setup`, it calls `dependency.EnsureAll`, then `dependency.EnsureRuntime`, then `command.InitializePrefix`. When you run `run`, it does the same setup and then calls one of the launch methods. The `Clean` method handles removing YAPL-managed directories.
@@ -195,7 +211,7 @@ The LAN package client. Connects to a YAPL server to list available packages or 
 
 Here's what happens when you type `./yapl run "Doom"`:
 
-1. **`main.go`** — Parses `run` and `"Doom"`. Calls `app.Find("Doom")` to locate it in `games/` or `apps/`. Loads configs. Creates an `App` struct. Calls `app.Run()`.
+1. **`kernel`** — Matches the `run` verb to the lifecycle module and parses its flags. **`lifecycle`** calls `app.Find("Doom")` to locate it in `games/` or `apps/`, loads configs, creates an `App` struct and calls `app.Run()`.
 
 2. **`app.Run()`** — Calls `dependency.EnsureAll()` to make sure Proton and DXVK are downloaded. Then calls `dependency.EnsureRuntime()` if a runtime is configured. Then calls `command.InitializePrefix()` to make sure the Wine prefix exists.
 
@@ -213,7 +229,7 @@ Here's what happens when you type `./yapl run "Doom"`:
 
 Here's what happens when you type `./yapl pull --server 192.168.1.10:8471 "Doom" game`:
 
-1. **`main.go`** — Parses the `pull` command and creates a `client.Client` with the server address and auth config.
+1. **`kernel` → `store` module** — Parses the `pull` command and creates a `client.Client` with the server address and auth config.
 
 2. **`client.List()`** — Fetches `GET /packages` to discover the filename extension for the `Doom` package.
 
@@ -225,10 +241,12 @@ Here's what happens when you type `./yapl pull --server 192.168.1.10:8471 "Doom"
 
 ## How to add a new command
 
-1. Add a `case "mycommand":` to the switch in `cmd/yapl/main.go`
-2. Add a `MyCommand()` method on the `App` struct in `internal/app/app.go`
-3. Add the detailed logic to the relevant package under `internal/`
-4. Write tests first (failing), then the implementation
+1. Pick the module the command belongs to (or create `internal/modules/<name>` with `const Version` and a `Module` type, and register it in `cmd/yapl/main.go`).
+2. Add a `kernel.Command` with `Verb`, `Usage`, `Summary`, `Examples` and a `Flags` function. Return `kernel.UsageError(...)` for bad arguments.
+3. Put the real logic in a domain package under `internal/`, not in the module.
+4. Write tests first (failing), then the implementation.
+5. Regenerate the CLI reference: `go test ./cmd/yapl -run TestCLIReference -update`. The test fails until you do.
+6. Bump the module's `Version`.
 
 ## How to add a new launch method
 

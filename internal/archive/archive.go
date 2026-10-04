@@ -10,18 +10,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/ulikunitz/xz"
+
 	"yapl/internal/config"
+	"yapl/internal/defaults"
 	"yapl/internal/fs"
 )
 
-// downloadTimeout caps how long a single HTTP download may take.
-const downloadTimeout = 30 * time.Minute
-
-var httpClient = &http.Client{Timeout: downloadTimeout}
+var httpClient = &http.Client{Timeout: defaults.DownloadTimeout}
 
 // Archive represents a local or remote compressed tarball.
 type Archive struct {

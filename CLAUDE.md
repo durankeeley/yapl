@@ -15,7 +15,11 @@ Primary use case: set up a game on one PC, package it, copy it to 10 LAN party m
 ## Architecture
 
 ```
-cmd/yapl/main.go          — CLI entry: flag parsing, command dispatch
+cmd/yapl/main.go          — registers modules with the kernel; nothing else
+internal/kernel/          — microkernel: per-command flag sets, help, version, dispatch
+internal/modules/*/       — versioned modules contributing commands (lifecycle, registry, store, …)
+internal/defaults/        — every shared tunable (ports, timeouts, formats) as named constants
+internal/version/         — semantic/natural version parsing and ordering
 internal/app/app.go       — Orchestrator: holds state, calls into packages
 internal/config/config.go — Load/save runner.json and game.json/app.json
 internal/dependency/      — Download/verify Proton, DXVK, Steam Runtime
@@ -26,8 +30,8 @@ internal/fs/fs.go         — Filesystem helpers (copy, exists, abs path)
 
 ### Flow
 
-1. `main.go` parses flags and dispatches to `setup`, `package`, `run`, or `unpackage`
-2. `initializeApp` loads `runner.json` (global tool URLs) and `game.json` / `app.json` (per-game config)
+1. The kernel matches the verb to a module command and parses that command's own flags
+2. The lifecycle module loads `runner.json` (global tool URLs) and `game.json` / `app.json` (per-game config)
 3. An `App` struct is created and the appropriate method called (`Setup`, `Run`, `Package`)
 4. `App.Setup` / `App.Run` call `dependency.EnsureAll` (downloads if missing), `dependency.EnsureRuntime`, then `command.InitializePrefix`
 5. `App.Run` then dispatches to one of three launch methods:
@@ -77,6 +81,9 @@ internal/fs/fs.go         — Filesystem helpers (copy, exists, abs path)
 - **No comments** explaining what code does — name things clearly instead. Only comment *why* when it's non-obvious (a workaround, a hidden constraint)
 - **No half-finished code** — every PR must be complete and testable
 - **No unnecessary abstractions** — don't design for hypothetical futures
+- **No magic numbers** — shared tunables live in `internal/defaults`; package-local ones are named constants
+- **Modules are versioned** — every `internal/modules/*` package has `const Version`; bump it when behaviour changes
+- **Docs can't drift** — `docs/cli-reference.md` is generated from command registrations; regenerate with `go test ./cmd/yapl -run TestCLIReference -update`
 
 ### Testing Rules
 
@@ -85,6 +92,8 @@ internal/fs/fs.go         — Filesystem helpers (copy, exists, abs path)
 - Write the **failing** test first, then write the code to make it pass
 - Test the behaviour, not the implementation — test via public functions
 - Use table-driven tests where there are multiple input cases
+- Write tests in Gherkin style: `t.Run("given … when … then …")` with `// Given`, `// When`, `// Then` sections
+- Commit before work starts (PRD marked In Progress) and after it finishes, so every PRD can be rolled back
 - No mocking of the filesystem for unit tests — use `t.TempDir()` for real temp directories
 
 ---
@@ -155,7 +164,7 @@ YAPL's CLI must follow Kubernetes-style conventions. Every new command and flag 
 yapl <verb> [noun] <name> [flags]
 ```
 
-- Verb comes first: `setup`, `run`, `package`, `unpackage`, `info`, `list`, `clean`, `serve`, `pull`
+- Verb comes first: `setup`, `run`, `package`, `unpackage`, `info`, `list`, `clean`, `serve`, `pull`, `version`, `help`
 - Noun qualifies the verb when needed: `setup game`, `unpackage app`
 - Name is the target identifier: `"Doom"`, `"Counter-Strike"`
 - Flags follow at the end

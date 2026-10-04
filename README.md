@@ -95,6 +95,8 @@ YAPL automatically finds the game in `games/` or `apps/` — you never need to s
 | `serve`                        | Starts a LAN package server that hosts packaged archives for clients to pull.    |
 | `pull --server <addr> list`    | Lists packages available on a YAPL server.                                       |
 | `pull --server <addr> <name>`  | Downloads and unpackages a game from a YAPL server.                              |
+| `version`                      | Shows the version of the kernel and each module.                                 |
+| `help [command]`               | Shows all commands, or one command's flags and examples.                         |
 
 For `run`, `package`, and `info`, YAPL automatically finds the entry in `games/` or `apps/` — you never need to specify the type. Only `setup` and `unpackage` require it because they need to know where to create or extract.
 
@@ -301,26 +303,19 @@ Some games need a helper process running before they start, such as a LAN relay 
 
 ## Flags
 
-| Flag                    | Description                                                                                                    |
-| :---------------------- | :------------------------------------------------------------------------------------------------------------- |
-| `--config <file>`       | Use a custom config file name (e.g. `mod-a.json`) instead of `game.json` / `app.json`.                       |
-| `--method <type>`       | Set the launch method (`direct`, `container`, `umu`) when `setup` creates a new config. Ignored if the config file already exists. |
-| `--upgrade-proton`      | Forces a re-download of the configured Proton version, even if it already exists.                             |
-| `--format <type>`       | Compression format for `package`. Options: `gz`, `xz`, `zst`. (Default: `xz`).                              |
-| `--bundle-deps`         | Bundles Proton and dependencies into the package for offline deployment. Use with `package`.                 |
-| `--yes`                 | Skips confirmation prompts (e.g. the size warning for `--bundle-deps` or the `clean` confirmation).          |
-| `--debug`               | Enables verbose logging from Proton and DXVK (`PROTON_LOG=1`, etc.).                                        |
-| `--steam`               | A compatibility flag. It is **not** compatible with the `direct` launch method and is intended for container-based launches. |
-| `--prefix`              | (`clean` only) Delete the game/app prefix directory.                                                         |
-| `--proton`              | (`clean` only) Delete the downloaded Proton build for this game.                                             |
-| `--deps`                | (`clean` only) Delete the DXVK and VKD3D directories for this game's configured versions.                   |
-| `--all`                 | (`clean` only) Equivalent to `--prefix --proton --deps`.                                                     |
-| `--packages-dir <path>` | (`serve` only) Directory whose `games/` and `apps/` subdirectories contain packaged archives. Required.     |
-| `--port <int>`          | (`serve` only) Port to listen on. Default: `8471`.                                                           |
-| `--auth <mode>`         | (`serve`/`pull`) Auth mode: `open` or `password`. Default: `open`.                                          |
-| `--password <string>`   | (`serve`/`pull`) Shared password for `password` auth mode.                                                   |
-| `--server <addr>`       | (`pull` only) YAPL server address (`host:port` or full URL). Omit to auto-discover via UDP broadcast.       |
-| `--output-dir <path>`   | (`pull` only) Where to save the downloaded archive before unpackaging (default: system temp dir).            |
+Every flag belongs to one command, and each command only accepts its own flags. To see them:
+
+```bash
+./yapl help              # all commands
+./yapl help package      # one command's flags and examples
+./yapl package --help    # same thing
+```
+
+The full reference, generated from the same source as `yapl help`, is in [`docs/cli-reference.md`](docs/cli-reference.md).
+
+## Versions
+
+YAPL is made of independently versioned modules (`lifecycle`, `registry`, `store`, …) on top of a small kernel. `./yapl version` lists them, and `./yapl version --output json` gives the same list as JSON for scripts. Servers and clients use these versions to work out which parts need an upgrade.
 
 -----
 

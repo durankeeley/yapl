@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"yapl/internal/defaults"
 )
 
 // PackageEntry describes a single package available on the server.
@@ -141,7 +143,7 @@ func (s *Server) BroadcastTo(addr *net.UDPAddr) error {
 // and broadcasting the server's presence every 2 seconds.
 func (s *Server) Start() error {
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(defaults.ManifestRefreshInterval)
 		defer ticker.Stop()
 		for range ticker.C {
 			s.RefreshManifest()
@@ -150,7 +152,7 @@ func (s *Server) Start() error {
 
 	go func() {
 		bcastAddr := &net.UDPAddr{IP: net.IPv4bcast, Port: s.cfg.Port}
-		ticker := time.NewTicker(2 * time.Second)
+		ticker := time.NewTicker(defaults.BroadcastInterval)
 		defer ticker.Stop()
 		for range ticker.C {
 			s.BroadcastTo(bcastAddr)

@@ -12,7 +12,10 @@ const runMainEnv = "YAPL_TEST_MAIN"
 
 func TestMain(m *testing.M) {
 	if os.Getenv(runMainEnv) == "1" {
-		os.Args = append([]string{"yapl"}, strings.Split(os.Getenv("YAPL_TEST_ARGS"), "\x1f")...)
+		os.Args = []string{"yapl"}
+		if raw := os.Getenv("YAPL_TEST_ARGS"); raw != "" {
+			os.Args = append(os.Args, strings.Split(raw, "\x1f")...)
+		}
 		main()
 		os.Exit(0)
 	}
@@ -101,6 +104,91 @@ func TestClean(t *testing.T) {
 		// Then
 		if res.exitCode == 0 || !strings.Contains(res.output, "--prefix") {
 			t.Fatalf("expected usage error mentioning --prefix, got exit %d:\n%s", res.exitCode, res.output)
+		}
+	})
+}
+
+func TestHelpAndVersion(t *testing.T) {
+	t.Run("given no arguments when yapl runs then the command overview is printed with a usage exit code", func(t *testing.T) {
+		// When
+		res := runCLI(t, t.TempDir())
+
+		// Then
+		if res.exitCode != 2 {
+			t.Fatalf("exit %d, want 2", res.exitCode)
+		}
+		for _, verb := range []string{"setup", "run", "package", "unpackage", "info", "list", "clean", "serve", "pull", "help", "version"} {
+			if !strings.Contains(res.output, "  "+verb+" ") {
+				t.Errorf("overview missing %q:\n%s", verb, res.output)
+			}
+		}
+	})
+
+	t.Run("given help for clean then its scoped flags are listed with double dashes", func(t *testing.T) {
+		// When
+		res := runCLI(t, t.TempDir(), "help", "clean")
+
+		// Then
+		for _, want := range []string{"Usage: yapl clean <name> [flags]", "--prefix", "--proton", "--deps", "--all", "--yes"} {
+			if !strings.Contains(res.output, want) {
+				t.Errorf("clean help missing %q:\n%s", want, res.output)
+			}
+		}
+	})
+
+	t.Run("given version then every module is reported", func(t *testing.T) {
+		// When
+		res := runCLI(t, t.TempDir(), "version")
+
+		// Then
+		for _, want := range []string{"kernel", "lifecycle", "registry", "store"} {
+			if !strings.Contains(res.output, want) {
+				t.Errorf("version missing %q:\n%s", want, res.output)
+			}
+		}
+	})
+}
+
+func TestFlagScoping(t *testing.T) {
+	t.Run("given a clean flag passed to serve when yapl runs then it is rejected as unknown", func(t *testing.T) {
+		// When
+		res := runCLI(t, t.TempDir(), "serve", "--packages-dir", ".", "--prefix")
+
+		// Then
+		if res.exitCode != 2 || !strings.Contains(res.output, "--prefix") {
+			t.Fatalf("exit %d:\n%s", res.exitCode, res.output)
+		}
+	})
+
+	t.Run("given an unknown command then the error names it", func(t *testing.T) {
+		res := runCLI(t, t.TempDir(), "teleport")
+		if res.exitCode != 2 || !strings.Contains(res.output, `unknown command "teleport"`) {
+			t.Fatalf("exit %d:\n%s", res.exitCode, res.output)
+		}
+	})
+}
+
+func TestSetupValidation(t *testing.T) {
+	t.Run("given an invalid launch method when setup runs then it is a usage error and nothing is created", func(t *testing.T) {
+		// Given
+		workDir := t.TempDir()
+
+		// When
+		res := runCLI(t, workDir, "setup", "game", "Doom", "--method", "teleport")
+
+		// Then
+		if res.exitCode != 2 || !strings.Contains(res.output, "invalid --method") {
+			t.Fatalf("exit %d:\n%s", res.exitCode, res.output)
+		}
+		if _, err := os.Stat(filepath.Join(workDir, "games", "Doom")); !os.IsNotExist(err) {
+			t.Fatal("setup created a game directory despite the invalid method")
+		}
+	})
+
+	t.Run("given a wrong kind when setup runs then it explains game or app", func(t *testing.T) {
+		res := runCLI(t, t.TempDir(), "setup", "movie", "Doom")
+		if res.exitCode != 2 || !strings.Contains(res.output, "game or app") {
+			t.Fatalf("exit %d:\n%s", res.exitCode, res.output)
 		}
 	})
 }

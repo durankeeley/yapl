@@ -10,6 +10,7 @@ import (
 	"yapl/internal/archive"
 	"yapl/internal/command"
 	"yapl/internal/config"
+	"yapl/internal/defaults"
 	"yapl/internal/dependency"
 	"yapl/internal/fs"
 )
@@ -133,7 +134,7 @@ func ListAll(w io.Writer) error {
 			}
 			method := cfg.LaunchMethod
 			if method == "" {
-				method = "container"
+				method = defaults.LaunchMethod
 			}
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 				d.label, e.Name(), cfg.ProtonVersion, method, cfg.Executable)
@@ -438,7 +439,7 @@ func (a *App) Run() error {
 
 	method := a.AppConfig.LaunchMethod
 	if method == "" {
-		method = "container"
+		method = defaults.LaunchMethod
 	}
 
 	fmt.Printf("-> Using launch method from config: %s\n", method)

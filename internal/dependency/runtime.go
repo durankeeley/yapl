@@ -8,13 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"yapl/internal/archive"
 	"yapl/internal/config"
+	"yapl/internal/defaults"
 )
 
-var httpClient = &http.Client{Timeout: 30 * time.Minute}
+var httpClient = &http.Client{Timeout: defaults.DownloadTimeout}
 
 // EnsureRuntime checks if the Steam Linux Runtime is installed and up-to-date.
 func EnsureRuntime(appCfg config.App, globalCfg config.Global) error {

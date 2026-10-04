@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"yapl/internal/defaults"
 	"yapl/internal/fs"
 )
 
@@ -153,7 +154,7 @@ func LoadOrCreateApp(appType, appName, configName string, globalCfg Global, defa
 		break
 	}
 
-	launchMethod := "container"
+	launchMethod := defaults.LaunchMethod
 	if defaultMethod != "" {
 		launchMethod = defaultMethod
 	}
