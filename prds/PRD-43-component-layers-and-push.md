@@ -1,6 +1,6 @@
 # PRD-43 - Shared Component Layers and `yapl push`
 
-**Status:** `[ ] Pending`
+**Status:** `[ ] In Progress`
 **Priority:** High
 **Size:** L
 **Sprint:** Phase 2 — Registry server
@@ -36,7 +36,8 @@ components/<kind>/<version>/manifest.json   {kind, version, sha256, size, versio
 
 ### Upload rules
 * `serve --allow-push` enables PUT; disabled by default. With `--auth open` the server prints a warning that anyone on the LAN can push.
-* The server streams the archive part to a temporary file in the target directory while hashing it. If the SHA-256 differs from the manifest it deletes the file and answers 400. Otherwise it renames the staging directory into place, so readers never see half a version.
+* Multipart parts may arrive in any order; clients send `archive`, then `cover`, then `manifest`. Sending the manifest last lets a client stream-pack a component (no temp file) and put the SHA-256 it computed while streaming into the manifest.
+* The server streams the archive part into a hidden staging directory (`.upload-*`, never indexed) while hashing it. If the SHA-256 or size differs from the manifest it deletes the staging directory and answers 400. Otherwise it renames the staging directory into place, so readers never see half a version.
 * An existing version is immutable: 409 Conflict.
 
 ### `yapl push <name> [--server] [--version]`
