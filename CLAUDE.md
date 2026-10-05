@@ -155,9 +155,9 @@ To load a skill: read the file and follow its instructions before proceeding wit
 
 ---
 
-## CLI Design — Kubernetes Style
+## CLI Design — Docker / Kubernetes Style
 
-YAPL's CLI must follow Kubernetes-style conventions. Every new command and flag must conform to this pattern.
+YAPL's CLI must follow Docker/kubectl-style conventions. Every new command and flag must conform to this pattern.
 
 ### Command structure
 
@@ -165,7 +165,7 @@ YAPL's CLI must follow Kubernetes-style conventions. Every new command and flag 
 yapl <verb> [noun] <name> [flags]
 ```
 
-- Verb comes first: `setup`, `run`, `package`, `unpackage`, `info`, `list`, `clean`, `serve`, `pull`, `version`, `help`
+- Verb comes first: `setup`, `install`, `run`, `package`, `unpackage`, `info`, `list`, `clean`, `serve`, `search`, `pull`, `push`, `upgrade`, `console`, `export`, `version`, `help`
 - Noun qualifies the verb when needed: `setup game`, `unpackage app`
 - Name is the target identifier: `"Doom"`, `"Counter-Strike"`
 - Flags follow at the end
@@ -190,3 +190,5 @@ yapl pull --server 192.168.1.10:8471 "Doom"
 ```
 
 Commands should read like plain English sentences. Avoid abbreviations in command or flag names.
+
+**Never put a magic word where a name goes.** `yapl pull list` or `yapl upgrade self` would collide with a game called "list" or "self". Use a separate verb (`yapl search`) or a flag (`yapl upgrade --self`). Validate arguments before any network call (discovery waits several seconds), so mistakes fail instantly.

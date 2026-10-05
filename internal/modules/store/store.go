@@ -25,7 +25,7 @@ import (
 )
 
 // Version is bumped whenever a store command changes behaviour.
-const Version = "2.1.0"
+const Version = "3.0.0"
 
 const bytesPerMegabyte = 1 << 20
 
@@ -36,7 +36,7 @@ func (Module) Name() string    { return "store" }
 func (Module) Version() string { return Version }
 
 func (Module) Commands() []kernel.Command {
-	return []kernel.Command{pullCommand(), pushCommand(), upgradeCommand()}
+	return []kernel.Command{searchCommand(), pullCommand(), pushCommand(), upgradeCommand()}
 }
 
 func serverFlags(fs *flag.FlagSet) {
@@ -138,43 +138,69 @@ func loadApp(name, configName string) (*app.App, error) {
 	return a, nil
 }
 
+func searchCommand() kernel.Command {
+	return kernel.Command{
+		Verb:        "search",
+		Usage:       "search [term] [flags]",
+		Summary:     "List the games and apps a YAPL server offers",
+		Description: "Shows every package on the server, or only those whose name, title or tags contain term (case-insensitive). The server is chosen like 'pull' chooses it.",
+		Examples:    []string{"yapl search", "yapl search fps", `yapl search "age of empires" --server 192.168.1.10:8471`},
+		Flags:       serverFlags,
+		Run: func(ctx *kernel.Context) error {
+			c, err := connect(ctx)
+			if err != nil {
+				return err
+			}
+			if err := printCatalog(ctx, c, ctx.Arg(0)); err != nil {
+				return err
+			}
+			remember(ctx, c)
+			return nil
+		},
+	}
+}
+
 func pullCommand() kernel.Command {
 	return kernel.Command{
 		Verb:        "pull",
-		Usage:       "pull <list|name[:version]> [flags]",
-		Summary:     "List or install packages from a YAPL server",
-		Description: "Installs name (latest version) or name:version. The archive and every component it needs (Proton, runtime, DXVK, …) are downloaded, checked against their SHA-256 and moved into place only when complete. The server is remembered in client.json; without --server YAPL uses that, or listens for a server's LAN broadcast.",
+		Usage:       "pull <name[:version]> [flags]",
+		Summary:     "Install a game or app from a YAPL server",
+		Description: "Installs name (latest version) or name:version. The archive and every component it needs (Proton, runtime, DXVK, …) are downloaded, checked against their SHA-256 and moved into place only when complete. The server is remembered in client.json; without --server YAPL uses that, or listens for a server's LAN broadcast. Use 'yapl search' to see what the server has.",
 		Examples: []string{
-			"yapl pull list",
 			`yapl pull "Doom"`,
 			`yapl pull "Doom:1.2.0"`,
 			`yapl pull "Doom" --server 192.168.1.10:8471`,
 		},
 		Flags: serverFlags,
 		Run: func(ctx *kernel.Context) error {
+			ref := ctx.Arg(0)
+			switch ref {
+			case "":
+				return kernel.UsageError("a name is required; run 'yapl search' to see what the server has")
+			case legacyListWord:
+				return kernel.UsageError("'yapl pull list' is now 'yapl search'")
+			}
 			c, err := connect(ctx)
 			if err != nil {
 				return err
 			}
-			ref := ctx.Arg(0)
-			if ref == "" || ref == "list" {
-				err = printCatalog(ctx, c)
-			} else {
-				name, tag := manifest.ParseReference(ref)
-				_, err = pull.Pull(c, name, tag, pull.Options{Out: ctx.Stdout})
+			name, tag := manifest.ParseReference(ref)
+			if _, err := pull.Pull(c, name, tag, pull.Options{Out: ctx.Stdout}); err != nil {
+				return err
 			}
-			if err == nil {
-				remember(ctx, c)
-			}
-			return err
+			remember(ctx, c)
+			return nil
 		},
 	}
 }
 
-func printCatalog(ctx *kernel.Context, c *client.Client) error {
+// legacyListWord was the old `pull list` spelling of `search`.
+const legacyListWord = "list"
+
+func printCatalog(ctx *kernel.Context, c *client.Client, term string) error {
 	catalog, err := c.Catalog()
 	if errors.Is(err, client.ErrNotFound) {
-		return printLegacyCatalog(ctx, c)
+		return printLegacyCatalog(ctx, c, term)
 	}
 	if err != nil {
 		return fmt.Errorf("list packages: %w", err)
@@ -182,12 +208,27 @@ func printCatalog(ctx *kernel.Context, c *client.Client) error {
 	tw := tabwriter.NewWriter(ctx.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tTYPE\tLATEST\tVERSIONS\tSIZE\tTITLE")
 	for _, e := range catalog {
+		if !matches(term, append([]string{e.Name, e.Title}, e.Tags...)...) {
+			continue
+		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d MB\t%s\n", e.Name, e.Type, e.Latest, len(e.Versions), e.SizeBytes/bytesPerMegabyte, e.Title)
 	}
 	return tw.Flush()
 }
 
-func printLegacyCatalog(ctx *kernel.Context, c *client.Client) error {
+// matches reports whether term (case-insensitive) is in any field; an
+// empty term matches everything.
+func matches(term string, fields ...string) bool {
+	term = strings.ToLower(term)
+	for _, f := range fields {
+		if strings.Contains(strings.ToLower(f), term) {
+			return true
+		}
+	}
+	return false
+}
+
+func printLegacyCatalog(ctx *kernel.Context, c *client.Client, term string) error {
 	entries, err := c.List()
 	if err != nil {
 		return fmt.Errorf("list packages: %w", err)
@@ -195,48 +236,62 @@ func printLegacyCatalog(ctx *kernel.Context, c *client.Client) error {
 	tw := tabwriter.NewWriter(ctx.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tTYPE\tFORMAT\tSIZE")
 	for _, e := range entries {
+		if !matches(term, e.Name) {
+			continue
+		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d MB\n", e.Name, e.Type, e.Format, e.SizeBytes/bytesPerMegabyte)
 	}
 	return tw.Flush()
 }
 
-// Arguments to upgrade that name a part rather than a game.
+// Old `upgrade self` / `upgrade catalog` spellings, now flags.
 const (
-	upgradeSelf    = "self"
-	upgradeCatalog = "catalog"
+	legacySelfWord    = "self"
+	legacyCatalogWord = "catalog"
 )
 
 func upgradeCommand() kernel.Command {
 	return kernel.Command{
 		Verb:    "upgrade",
-		Usage:   "upgrade [name[:version] | self | catalog] [flags]",
+		Usage:   "upgrade [name[:version]] [flags]",
 		Summary: "Upgrade only the parts that changed: games, yapl itself, or the defaults catalog",
 		Description: "Without arguments, lists what is out of date. With a name, installs the server's newer version of that game and keeps its saves (prefix/drive_c/users, prefix/user.reg and metadata.json \"preserve\" paths); an explicit :version can roll back. " +
-			"'self' replaces this yapl binary with the server's when the server's is newer in some module and older in none. 'catalog' adds the newer pinned Proton, runtime, DXVK and VKD3D versions to runner.json. --all upgrades every outdated game plus the catalog.",
+			"--self replaces this yapl binary with the server's when the server's is newer in some module and older in none. --catalog adds the newer pinned Proton, runtime, DXVK and VKD3D versions to runner.json (no server needed). --all upgrades every outdated game plus the catalog.",
 		Examples: []string{
 			"yapl upgrade",
 			`yapl upgrade "Doom"`,
 			`yapl upgrade "Doom:1.0.0"`,
 			"yapl upgrade --all",
-			"yapl upgrade self",
-			"yapl upgrade catalog",
+			"yapl upgrade --self",
+			"yapl upgrade --catalog",
 		},
 		Flags: func(fs *flag.FlagSet) {
 			serverFlags(fs)
 			fs.Bool("all", false, "Upgrade every outdated game and the catalog.")
+			fs.Bool("self", false, "Replace this yapl binary with the server's newer build.")
+			fs.Bool("catalog", false, "Add the newer pinned component versions to runner.json.")
 		},
 		Run: func(ctx *kernel.Context) error {
 			target := ctx.Arg(0)
-			opts := upgrade.Options{Out: ctx.Stdout}
-			if target == upgradeCatalog {
+			self, cat, all := ctx.Bool("self"), ctx.Bool("catalog"), ctx.Bool("all")
+			switch {
+			case target == legacySelfWord:
+				return kernel.UsageError("'yapl upgrade self' is now 'yapl upgrade --self'")
+			case target == legacyCatalogWord:
+				return kernel.UsageError("'yapl upgrade catalog' is now 'yapl upgrade --catalog'")
+			case countTrue(target != "", self, cat, all) > 1:
+				return kernel.UsageError("give either a name, --self, --catalog or --all")
+			}
+			if cat {
 				return upgradeCatalogPart(ctx)
 			}
+			opts := upgrade.Options{Out: ctx.Stdout}
 			c, err := connect(ctx)
 			if err != nil {
 				return err
 			}
 			switch {
-			case target == upgradeSelf:
+			case self:
 				exe, err := os.Executable()
 				if err != nil {
 					return fmt.Errorf("locate this yapl binary: %w", err)
@@ -252,14 +307,14 @@ func upgradeCommand() kernel.Command {
 			if err != nil {
 				return err
 			}
-			if !ctx.Bool("all") {
+			if !all {
 				printPlan(ctx, items)
 				return nil
 			}
 			for _, item := range items {
 				switch item.Part {
 				case upgrade.PartYAPL:
-					fmt.Fprintln(ctx.Stdout, "-> A newer yapl is available; run 'yapl upgrade self' to install it")
+					fmt.Fprintln(ctx.Stdout, "-> A newer yapl is available; run 'yapl upgrade --self' to install it")
 				case upgrade.PartCatalog:
 					err = upgradeCatalogPart(ctx)
 				default:
@@ -272,6 +327,16 @@ func upgradeCommand() kernel.Command {
 			return nil
 		},
 	}
+}
+
+func countTrue(values ...bool) int {
+	n := 0
+	for _, v := range values {
+		if v {
+			n++
+		}
+	}
+	return n
 }
 
 func plan(ctx *kernel.Context, c *client.Client) ([]upgrade.Item, error) {
@@ -304,7 +369,7 @@ func printPlan(ctx *kernel.Context, items []upgrade.Item) {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", i.Part, i.Name, i.From, i.To)
 	}
 	tw.Flush()
-	fmt.Fprintln(ctx.Stdout, "\nRun 'yapl upgrade <name>', 'yapl upgrade self', 'yapl upgrade catalog' or 'yapl upgrade --all'.")
+	fmt.Fprintln(ctx.Stdout, "\nRun 'yapl upgrade <name>', 'yapl upgrade --self', 'yapl upgrade --catalog' or 'yapl upgrade --all'.")
 }
 
 func upgradeCatalogPart(ctx *kernel.Context) error {

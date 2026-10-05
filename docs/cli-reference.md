@@ -274,15 +274,15 @@ yapl serve --packages-dir /srv/games
 yapl serve --packages-dir /srv/games --auth password --password lanparty --allow-push
 ```
 
-## `yapl pull`
+## `yapl search`
 
-List or install packages from a YAPL server
+List the games and apps a YAPL server offers
 
 ```
-yapl pull <list|name[:version]> [flags]
+yapl search [term] [flags]
 ```
 
-Installs name (latest version) or name:version. The archive and every component it needs (Proton, runtime, DXVK, …) are downloaded, checked against their SHA-256 and moved into place only when complete. The server is remembered in client.json; without --server YAPL uses that, or listens for a server's LAN broadcast.
+Shows every package on the server, or only those whose name, title or tags contain term (case-insensitive). The server is chosen like 'pull' chooses it.
 
 | Flag | Description | Default |
 |------|-------------|---------|
@@ -292,7 +292,29 @@ Installs name (latest version) or name:version. The archive and every component 
 | `--server <address>` | Server address (host:port or URL). Auto-discovered when omitted. |  |
 
 ```bash
-yapl pull list
+yapl search
+yapl search fps
+yapl search "age of empires" --server 192.168.1.10:8471
+```
+
+## `yapl pull`
+
+Install a game or app from a YAPL server
+
+```
+yapl pull <name[:version]> [flags]
+```
+
+Installs name (latest version) or name:version. The archive and every component it needs (Proton, runtime, DXVK, …) are downloaded, checked against their SHA-256 and moved into place only when complete. The server is remembered in client.json; without --server YAPL uses that, or listens for a server's LAN broadcast. Use 'yapl search' to see what the server has.
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--auth <mode>` | Auth mode: open or password. | `open` |
+| `--password <string>` | Password for password auth (default $YAPL_PASSWORD). |  |
+| `--port <port>` | UDP port to listen on for discovery. | `8471` |
+| `--server <address>` | Server address (host:port or URL). Auto-discovered when omitted. |  |
+
+```bash
 yapl pull "Doom"
 yapl pull "Doom:1.2.0"
 yapl pull "Doom" --server 192.168.1.10:8471
@@ -328,17 +350,19 @@ yapl push "Doom" --version 1.1.0 --server 192.168.1.10:8471 --auth password --pa
 Upgrade only the parts that changed: games, yapl itself, or the defaults catalog
 
 ```
-yapl upgrade [name[:version] | self | catalog] [flags]
+yapl upgrade [name[:version]] [flags]
 ```
 
-Without arguments, lists what is out of date. With a name, installs the server's newer version of that game and keeps its saves (prefix/drive_c/users, prefix/user.reg and metadata.json "preserve" paths); an explicit :version can roll back. 'self' replaces this yapl binary with the server's when the server's is newer in some module and older in none. 'catalog' adds the newer pinned Proton, runtime, DXVK and VKD3D versions to runner.json. --all upgrades every outdated game plus the catalog.
+Without arguments, lists what is out of date. With a name, installs the server's newer version of that game and keeps its saves (prefix/drive_c/users, prefix/user.reg and metadata.json "preserve" paths); an explicit :version can roll back. --self replaces this yapl binary with the server's when the server's is newer in some module and older in none. --catalog adds the newer pinned Proton, runtime, DXVK and VKD3D versions to runner.json (no server needed). --all upgrades every outdated game plus the catalog.
 
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--all` | Upgrade every outdated game and the catalog. |  |
 | `--auth <mode>` | Auth mode: open or password. | `open` |
+| `--catalog` | Add the newer pinned component versions to runner.json. |  |
 | `--password <string>` | Password for password auth (default $YAPL_PASSWORD). |  |
 | `--port <port>` | UDP port to listen on for discovery. | `8471` |
+| `--self` | Replace this yapl binary with the server's newer build. |  |
 | `--server <address>` | Server address (host:port or URL). Auto-discovered when omitted. |  |
 
 ```bash
@@ -346,7 +370,7 @@ yapl upgrade
 yapl upgrade "Doom"
 yapl upgrade "Doom:1.0.0"
 yapl upgrade --all
-yapl upgrade self
-yapl upgrade catalog
+yapl upgrade --self
+yapl upgrade --catalog
 ```
 

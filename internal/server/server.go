@@ -31,7 +31,7 @@ type Config struct {
 	Modules map[string]string
 	// AllowPush enables uploads (yapl push).
 	AllowPush bool
-	// BinaryPath, when set, is offered to clients for `yapl upgrade self`.
+	// BinaryPath, when set, is offered to clients for `yapl upgrade --self`.
 	BinaryPath string
 	// Warnings receives scan problems; nil means stderr.
 	Warnings io.Writer

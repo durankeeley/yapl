@@ -1,6 +1,6 @@
 # PRD-52 - Align New Commands With the Docker/kubectl CLI Style
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** S
 **Sprint:** Phase 3 follow-up
@@ -32,6 +32,6 @@
 
 ## 4. Execution & Milestones
 
-- [ ] Tests for `search`, `upgrade --self`, `upgrade --catalog` and the hints for old spellings.
-- [ ] Commands changed; CLI reference regenerated.
-- [ ] README, developer guide and CLAUDE.md updated.
+- [x] Tests for `search`, `upgrade --self`, `upgrade --catalog` and the hints for old spellings.
+- [x] Commands changed; CLI reference regenerated.
+- [x] README, developer guide and CLAUDE.md updated.

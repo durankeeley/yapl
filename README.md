@@ -158,7 +158,7 @@ Every entry runs this `yapl` binary with `--workdir` set to the library you expo
 | `pull --server <addr> list`    | Lists packages available on a YAPL server.                                       |
 | `pull --server <addr> <name>`  | Downloads and unpackages a game from a YAPL server.                              |
 | `push <name>`                  | Publishes a game and any components the server lacks.                            |
-| `upgrade [name\|self\|catalog]` | Upgrades only the parts whose version changed.                                   |
+| `upgrade [name] [--self\|--catalog\|--all]` | Upgrades only the parts whose version changed.                     |
 | `console`                      | Opens the full-screen, gamepad-driven launcher.                                  |
 | `export desktop\|steam\|autostart` | Adds games to the app menu or Steam, or starts the console on login.        |
 | `version`                      | Shows the version of the kernel and each module.                                 |
@@ -269,7 +269,7 @@ The server rescans the directory every 30 seconds, so new packages show up witho
 | GET | `/v1/components/{kind}/{version}/archive` | The component archive (`.tar.zst`) |
 | PUT | `/v1/packages/{name}/{version}` | Upload a package (multipart: `archive`, `cover`, `manifest`). Needs `--allow-push`. |
 | PUT | `/v1/components/{kind}/{version}` | Upload a component (multipart: `archive`, `manifest`). Needs `--allow-push`. |
-| GET | `/v1/yapl/binary` | The server's own `yapl` binary (with `X-Yapl-SHA256`), used by `yapl upgrade self` |
+| GET | `/v1/yapl/binary` | The server's own `yapl` binary (with `X-Yapl-SHA256`), used by `yapl upgrade --self` |
 | GET | `/packages`, `/packages/{name}` | Legacy endpoints for older YAPL clients (latest version only) |
 
 Names and versions that aren't safe path segments (`..`, `/`, a leading `.`) are rejected with `400`.
@@ -302,7 +302,8 @@ Components are shared layers: Proton builds, Steam runtimes, DXVK, VKD3D and umu
 Name the game, with an optional version tag like Docker. The server says whether it's a game or an app.
 
 ```bash
-./yapl pull list                 # catalog: name, type, latest version, title, size
+./yapl search                    # catalog: name, type, latest version, title, size
+./yapl search fps                # only names, titles or tags containing "fps"
 ./yapl pull "Doom"               # latest version
 ./yapl pull "Doom:1.2.0"         # a specific version
 ./yapl pull "Doom" --server 192.168.1.10:8471
@@ -335,13 +336,13 @@ Every part of YAPL has its own version: each game, each component, each module o
 ./yapl upgrade "Doom"         # newer Doom, keeping saves
 ./yapl upgrade "Doom:1.0.0"   # roll back to a specific version
 ./yapl upgrade --all          # every outdated game, plus the catalog
-./yapl upgrade self           # replace this yapl with the server's newer build
-./yapl upgrade catalog        # add newer pinned Proton/runtime/DXVK/VKD3D to runner.json (no server needed)
+./yapl upgrade --self         # replace this yapl with the server's newer build
+./yapl upgrade --catalog      # add newer pinned Proton/runtime/DXVK/VKD3D to runner.json (no server needed)
 ```
 
 * **Games** download and verify the new version first, only installing it when complete. Your saves move across: `prefix/drive_c/users/`, `prefix/user.reg`, and any paths listed under `preserve` in `metadata.json` (relative to the game directory, globs allowed). The old version is deleted only after the new one is in place. If anything fails, the old install is left untouched. Components the new version needs are pulled automatically, and old ones stay for other games.
-* **`self`** compares the server's per-module versions with yours. It upgrades only when the server is newer in at least one part and older in none, and refuses a binary built for a different OS or CPU. The server offers its own binary at `/v1/yapl/binary`, so one updated server can update every LAN machine.
-* **`catalog`** adds pins without removing your entries and switches the `defaults` block to the new pins. Existing games keep the exact versions in their `game.json`; only new games use the new defaults.
+* **`--self`** compares the server's per-module versions with yours. It upgrades only when the server is newer in at least one part and older in none, and refuses a binary built for a different OS or CPU. The server offers its own binary at `/v1/yapl/binary`, so one updated server can update every LAN machine.
+* **`--catalog`** adds pins without removing your entries and switches the `defaults` block to the new pins. Existing games keep the exact versions in their `game.json`; only new games use the new defaults.
 
 ### Package metadata and manifests
 

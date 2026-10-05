@@ -49,7 +49,7 @@ type Info struct {
 	Platform string `json:"platform"`
 }
 
-// BinaryPath serves the server's own yapl binary for `yapl upgrade self`.
+// BinaryPath serves the server's own yapl binary for `yapl upgrade --self`.
 // It is a permanent path: even clients on an older API can always reach it.
 const BinaryPath = "/v1/yapl/binary"
 

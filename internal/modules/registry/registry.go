@@ -46,7 +46,7 @@ func serveCommand() kernel.Command {
 				return kernel.UsageError("--packages-dir is required")
 			}
 			versions := ctx.Kernel.Versions()
-			// Offering our own binary lets clients run `yapl upgrade self`;
+			// Offering our own binary lets clients run `yapl upgrade --self`;
 			// if it can't be located the server still runs without it.
 			binary, _ := os.Executable()
 			s, err := server.New(server.Config{

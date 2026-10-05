@@ -111,7 +111,7 @@ func checkServer(c *client.Client) error {
 	case err != nil:
 		return err
 	case info.APIVersion != api.APIVersion:
-		return fmt.Errorf("server speaks API v%d, this yapl speaks v%d; run 'yapl upgrade self' or upgrade the server", info.APIVersion, api.APIVersion)
+		return fmt.Errorf("server speaks API v%d, this yapl speaks v%d; run 'yapl upgrade --self' or upgrade the server", info.APIVersion, api.APIVersion)
 	}
 	return nil
 }

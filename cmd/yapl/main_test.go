@@ -122,7 +122,7 @@ func TestHelpAndVersion(t *testing.T) {
 		if res.exitCode != 2 {
 			t.Fatalf("exit %d, want 2", res.exitCode)
 		}
-		for _, verb := range []string{"setup", "run", "package", "unpackage", "info", "list", "clean", "serve", "pull", "help", "version"} {
+		for _, verb := range []string{"setup", "run", "package", "unpackage", "info", "list", "clean", "serve", "pull", "push", "search", "upgrade", "install", "console", "export", "help", "version"} {
 			if !strings.Contains(res.output, "  "+verb+" ") {
 				t.Errorf("overview missing %q:\n%s", verb, res.output)
 			}
