@@ -155,8 +155,8 @@ Every entry runs this `yapl` binary with `--workdir` set to the library you expo
 | `info <name>`                  | Displays the resolved configuration and readiness status.                        |
 | `clean <name>`                 | Removes the prefix, Proton, or dependency directories for a game or app.         |
 | `serve`                        | Starts a LAN package server that hosts packaged archives for clients to pull.    |
-| `pull --server <addr> list`    | Lists packages available on a YAPL server.                                       |
-| `pull --server <addr> <name>`  | Downloads and unpackages a game from a YAPL server.                              |
+| `search [term]`                | Lists (or filters) the packages on a YAPL server.                                |
+| `pull <name[:version]>`        | Installs a game from a YAPL server, with its Proton and dependencies.            |
 | `push <name>`                  | Publishes a game and any components the server lacks.                            |
 | `upgrade [name] [--self\|--catalog\|--all]` | Upgrades only the parts whose version changed.                     |
 | `console`                      | Opens the full-screen, gamepad-driven launcher.                                  |
