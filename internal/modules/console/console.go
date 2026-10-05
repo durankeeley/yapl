@@ -26,7 +26,7 @@ import (
 )
 
 // Version is bumped whenever the console's behaviour or UI changes.
-const Version = "1.0.0"
+const Version = "1.0.1"
 
 const (
 	loopback        = "127.0.0.1"

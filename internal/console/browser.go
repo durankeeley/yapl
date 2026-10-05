@@ -24,6 +24,29 @@ var browsers = []struct{ name, family string }{
 	{"xdg-open", familyOpener},
 }
 
+const (
+	// noAutoUpdateUntil tells Chrome's outdated-build detector that
+	// auto-update is disabled until then, so "Can't update Chrome" never
+	// covers the console.
+	noAutoUpdateUntil = "Tue, 31 Dec 2099 23:59:59 GMT"
+	// updateCheckIntervalSeconds (one year) keeps a session from checking
+	// for updates at all.
+	updateCheckIntervalSeconds = "31536000"
+)
+
+// quietChromiumArgs keep a console window free of first-run, update,
+// crash-restore and translate prompts; there is no mouse on the couch to
+// dismiss them.
+var quietChromiumArgs = []string{
+	"--no-first-run",
+	"--no-default-browser-check",
+	"--noerrdialogs",
+	"--simulate-outdated-no-au=" + noAutoUpdateUntil,
+	"--check-for-update-interval=" + updateCheckIntervalSeconds,
+	"--hide-crash-restore-bubble",
+	"--disable-features=Translate",
+}
+
 // BrowserOptions describes how to show the console.
 type BrowserOptions struct {
 	URL string
@@ -43,7 +66,7 @@ func BrowserCommand(opts BrowserOptions, lookPath func(string) (string, error)) 
 		}
 		switch b.family {
 		case familyChromium:
-			args := []string{"--user-data-dir=" + opts.ProfileDir, "--no-first-run", "--no-default-browser-check", "--noerrdialogs"}
+			args := append([]string{"--user-data-dir=" + opts.ProfileDir}, quietChromiumArgs...)
 			if opts.Kiosk {
 				args = append(args, "--kiosk")
 			}

@@ -1,6 +1,6 @@
 # PRD-51 - No Browser Prompts in the Console Kiosk
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** S
 **Sprint:** Phase 3 follow-up
@@ -27,6 +27,6 @@ Values are named constants. Firefox is unaffected.
 
 ## 4. Execution & Milestones
 
-- [ ] Browser command test updated (Given/When/Then).
-- [ ] Flags added.
-- [ ] README console section mentions prompts are suppressed.
+- [x] Browser command test updated (Given/When/Then).
+- [x] Flags added.
+- [x] README console section mentions prompts are suppressed.

@@ -31,7 +31,7 @@ func TestBrowserCommand(t *testing.T) {
 			name: "given chromium then it opens the console as a kiosk app with its own profile",
 			path: []string{"chromium", "firefox", "xdg-open"}, opts: opts,
 			wantBin: "/usr/bin/chromium", wantDedicated: true,
-			wantArgs: []string{"--user-data-dir=/lib/.console-browser", "--no-first-run", "--no-default-browser-check", "--noerrdialogs", "--kiosk", "--app=http://127.0.0.1:8472/"},
+			wantArgs: append(append([]string{"--user-data-dir=/lib/.console-browser"}, quietChromiumArgs...), "--kiosk", "--app=http://127.0.0.1:8472/"),
 		},
 		{
 			name: "given chrome but no chromium then chrome is used",
@@ -48,7 +48,7 @@ func TestBrowserCommand(t *testing.T) {
 			name: "given windowed mode with chromium then it opens an app window without kiosk",
 			path: []string{"chromium"}, opts: BrowserOptions{URL: opts.URL, ProfileDir: opts.ProfileDir},
 			wantBin: "/usr/bin/chromium", wantDedicated: true,
-			wantArgs: []string{"--user-data-dir=/lib/.console-browser", "--no-first-run", "--no-default-browser-check", "--noerrdialogs", "--app=http://127.0.0.1:8472/"},
+			wantArgs: append(append([]string{"--user-data-dir=/lib/.console-browser"}, quietChromiumArgs...), "--app=http://127.0.0.1:8472/"),
 		},
 		{
 			name: "given only xdg-open then the default browser is asked to open the url",
@@ -78,6 +78,24 @@ func TestBrowserCommand(t *testing.T) {
 		_, _, err := BrowserCommand(opts, onPath())
 		if err == nil || !strings.Contains(err.Error(), opts.URL) {
 			t.Fatalf("error = %v", err)
+		}
+	})
+}
+
+func TestChromiumNeverPrompts(t *testing.T) {
+	t.Run("given a chromium-family browser then update, crash-restore and translate prompts are suppressed", func(t *testing.T) {
+		// Given / When
+		cmd, _, err := BrowserCommand(BrowserOptions{URL: "http://127.0.0.1:8472/", ProfileDir: "/p", Kiosk: true}, onPath("google-chrome-stable"))
+
+		// Then
+		if err != nil {
+			t.Fatal(err)
+		}
+		args := strings.Join(cmd.Args, " ")
+		for _, want := range []string{"--simulate-outdated-no-au=", "--check-for-update-interval=", "--hide-crash-restore-bubble", "--disable-features=Translate", "--no-first-run"} {
+			if !strings.Contains(args, want) {
+				t.Errorf("missing %s in %s", want, args)
+			}
 		}
 	})
 }

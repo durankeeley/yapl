@@ -116,7 +116,7 @@ YAPL automatically finds the game in `games/` or `apps/` — you never need to s
 
 How it starts:
 
-* The console runs on `http://127.0.0.1:8472` and opens in the first browser it finds: Chromium, Chrome, Brave, Edge, then Firefox, then the default browser via `xdg-open`. It runs as a full-screen kiosk with its own browser profile (`<library>/.console-browser`), so your normal browser and its tabs aren't touched. Closing that kiosk window quits the console.
+* The console runs on `http://127.0.0.1:8472` and opens in the first browser it finds: Chromium, Chrome, Brave, Edge, then Firefox, then the default browser via `xdg-open`. It runs as a full-screen kiosk with its own browser profile (`<library>/.console-browser`), so your normal browser and its tabs aren't touched. Closing that kiosk window quits the console. Chromium-family browsers are started with update checks, "Can't update Chrome", crash-restore and translate prompts turned off, so nothing covers the console.
 * The server is `--server`, else the one remembered in `client.json`, else one found on the LAN. With no server the console still runs offline with the local library.
 * `--windowed` opens a normal app window, `--no-browser` only prints the URL, and `--port` changes the port.
 * The console only answers on loopback addresses, and every action needs a header that ordinary web pages can't send, so a website can't control your games through it.
