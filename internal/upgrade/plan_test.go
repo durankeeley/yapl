@@ -139,3 +139,18 @@ func TestInstalled(t *testing.T) {
 		}
 	})
 }
+
+func TestInstalled_IncludesSymlinkedGames(t *testing.T) {
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+	elsewhere := filepath.Join(t.TempDir(), "Doom")
+	os.MkdirAll(elsewhere, 0755)
+	manifest.WriteInstalled(elsewhere, manifest.Installed{Name: "Doom", Type: "game", Version: "1.0.0"})
+	os.MkdirAll("games", 0755)
+	os.Symlink(elsewhere, filepath.Join("games", "Doom"))
+	if got, err := Installed(); err != nil || len(got) != 1 {
+		t.Fatalf("installed = %+v, %v", got, err)
+	}
+}

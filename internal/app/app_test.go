@@ -675,3 +675,26 @@ func TestRun_ErrorForInvalidLaunchMethod(t *testing.T) {
 		t.Errorf("expected error to mention 'launch_method', got: %v", err)
 	}
 }
+
+func TestListAll_IncludesSymlinkedGames(t *testing.T) {
+	// Given a game that lives on another disk and is symlinked into games/
+	d := t.TempDir()
+	chdir(t, d)
+	elsewhere := filepath.Join(t.TempDir(), "aoe2hd")
+	os.MkdirAll(elsewhere, 0755)
+	os.WriteFile(filepath.Join(elsewhere, "game.json"), []byte(`{"proton_version":"ge","executable":"drive_c/AoE2HD.exe"}`), 0644)
+	os.MkdirAll("games", 0755)
+	os.Symlink(elsewhere, filepath.Join("games", "aoe2hd"))
+	os.Symlink(filepath.Join(d, "nowhere"), filepath.Join("games", "dangling"))
+
+	// When
+	var buf strings.Builder
+	if err := ListAll(&buf); err != nil {
+		t.Fatal(err)
+	}
+
+	// Then
+	if !strings.Contains(buf.String(), "aoe2hd") || strings.Contains(buf.String(), "dangling") {
+		t.Fatalf("list:\n%s", buf.String())
+	}
+}

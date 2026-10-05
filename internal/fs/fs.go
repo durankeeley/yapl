@@ -136,3 +136,10 @@ func OverlayDir(src, dst string) error {
 		return CopyFile(src, dst)
 	}
 }
+
+// IsDir reports whether path is a directory, following symlinks, so games
+// symlinked into the library from another disk count as directories.
+func IsDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}

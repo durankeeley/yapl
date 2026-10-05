@@ -500,6 +500,10 @@ Some old games load `d3d9.dll`/`d3d11.dll` from their own folder instead of the 
 | `10` | `d3d10.dll`, `d3d10_1.dll`, `d3d10core.dll`, `d3d11.dll`, `dxgi.dll` |
 | `11` | `d3d11.dll`, `dxgi.dll` |
 
+### Games on another disk
+
+A game directory can be a symlink, for example `games/aoe2hd -> /mnt/ssd/games/aoe2hd`. `list`, `run`, the console, `export` and `upgrade` all treat it like a normal game directory, and a server's packages directory can symlink package folders the same way. Broken symlinks are skipped.
+
 ## Running from anywhere — `--workdir` and `YAPL_HOME`
 
 YAPL treats a folder as a *library*: `runner.json`, `proton/`, `dependencies/`, `games/` and `apps/` all live in it. By default the library is the current directory. To use one from anywhere (scripts, desktop launchers, systemd units), either pass `--workdir` **before** the command or set `YAPL_HOME`. The flag wins when both are set.

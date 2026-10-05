@@ -1,6 +1,6 @@
 # PRD-50 - Symlinked Games and Apps Are Part of the Library
 
-**Status:** `[ ] In Progress`
+**Status:** `[x] Complete`
 **Priority:** High
 **Size:** S
 **Sprint:** Phase 3 follow-up
@@ -22,6 +22,6 @@
 
 ## 4. Execution & Milestones
 
-- [ ] Given/When/Then tests with real symlinks in each scanner.
-- [ ] Scanners switched to `fs.IsDir`.
-- [ ] README notes symlinked games are supported.
+- [x] Given/When/Then tests with real symlinks in each scanner.
+- [x] Scanners switched to `fs.IsDir`.
+- [x] README notes symlinked games are supported.

@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"yapl/internal/archive"
+	"yapl/internal/fs"
 	"yapl/internal/manifest"
 	"yapl/internal/paths"
 	"yapl/internal/version"
@@ -116,7 +117,7 @@ func (s *Store) Refresh() error {
 			}
 			var name string
 			var found []*Version
-			if item.IsDir() {
+			if fs.IsDir(filepath.Join(dir, item.Name())) {
 				name = item.Name()
 				found = s.scanVersioned(dir, name, kind)
 			} else if v, ok := s.scanLegacy(dir, item.Name(), kind); ok {
@@ -214,10 +215,10 @@ func (s *Store) scanVersioned(typeDir, name, kind string) []*Version {
 	}
 	var out []*Version
 	for _, vd := range versionDirs {
-		if !vd.IsDir() || strings.HasPrefix(vd.Name(), ".") {
+		dir := filepath.Join(typeDir, name, vd.Name())
+		if strings.HasPrefix(vd.Name(), ".") || !fs.IsDir(dir) {
 			continue
 		}
-		dir := filepath.Join(typeDir, name, vd.Name())
 		m, err := manifest.Read(filepath.Join(dir, ManifestFile))
 		if err == nil && (m.Name != name || m.Metadata.Version != vd.Name() || m.Type != kind || !manifest.ValidName(m.Archive.File)) {
 			err = fmt.Errorf("manifest says %s %s:%s, directory says %s %s:%s", m.Type, m.Name, m.Metadata.Version, kind, name, vd.Name())

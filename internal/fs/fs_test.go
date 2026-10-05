@@ -282,3 +282,20 @@ func TestOverlayDir(t *testing.T) {
 		}
 	})
 }
+
+func TestIsDir(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "real"), 0755)
+	os.WriteFile(filepath.Join(dir, "file"), nil, 0644)
+	os.Symlink(filepath.Join(dir, "real"), filepath.Join(dir, "link"))
+	os.Symlink(filepath.Join(dir, "file"), filepath.Join(dir, "filelink"))
+	os.Symlink(filepath.Join(dir, "missing"), filepath.Join(dir, "dangling"))
+	tests := map[string]bool{"real": true, "link": true, "file": false, "filelink": false, "dangling": false, "absent": false}
+	for name, want := range tests {
+		t.Run("given "+name+" then IsDir is "+map[bool]string{true: "true", false: "false"}[want], func(t *testing.T) {
+			if got := IsDir(filepath.Join(dir, name)); got != want {
+				t.Fatalf("IsDir(%s) = %v", name, got)
+			}
+		})
+	}
+}

@@ -113,3 +113,21 @@ func TestUninstall(t *testing.T) {
 		}
 	})
 }
+
+func TestListLibrary_IncludesSymlinkedGames(t *testing.T) {
+	// Given
+	inLibrary(t)
+	elsewhere := filepath.Join(t.TempDir(), "aoe2hd")
+	os.MkdirAll(elsewhere, 0755)
+	os.WriteFile(filepath.Join(elsewhere, "game.json"), []byte(readyConfig), 0644)
+	os.MkdirAll("games", 0755)
+	os.Symlink(elsewhere, filepath.Join("games", "aoe2hd"))
+
+	// When
+	games, err := ListLibrary()
+
+	// Then
+	if err != nil || len(games) != 1 || games[0].Name != "aoe2hd" {
+		t.Fatalf("games = %+v, %v", games, err)
+	}
+}

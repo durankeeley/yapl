@@ -126,7 +126,7 @@ func ListAll(w io.Writer) error {
 			return err
 		}
 		for _, e := range entries {
-			if !e.IsDir() {
+			if !fs.IsDir(filepath.Join(d.dir, e.Name())) {
 				continue
 			}
 			cfgPath := filepath.Join(d.dir, e.Name(), d.cfgName)
@@ -278,7 +278,7 @@ func (a *App) warnIfProtonShared(w io.Writer) {
 			continue
 		}
 		for _, e := range entries {
-			if !e.IsDir() || e.Name() == a.Name {
+			if e.Name() == a.Name || !fs.IsDir(filepath.Join(d.dir, e.Name())) {
 				continue
 			}
 			cfgPath := filepath.Join(d.dir, e.Name(), d.cfgName)

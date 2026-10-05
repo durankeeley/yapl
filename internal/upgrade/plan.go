@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"yapl/internal/fs"
 	"yapl/internal/kernel"
 	"yapl/internal/manifest"
 	"yapl/internal/paths"
@@ -166,7 +167,7 @@ func Installed() ([]manifest.Installed, error) {
 			return nil, err
 		}
 		for _, e := range entries {
-			if !e.IsDir() {
+			if !fs.IsDir(filepath.Join(typeDir, e.Name())) {
 				continue
 			}
 			if in, err := manifest.ReadInstalled(filepath.Join(typeDir, e.Name())); err == nil {

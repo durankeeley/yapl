@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"yapl/internal/config"
+	"yapl/internal/fs"
 	"yapl/internal/manifest"
 	"yapl/internal/paths"
 )
@@ -47,7 +48,7 @@ func ListLibrary() ([]Game, error) {
 		}
 		var games []Game
 		for _, e := range entries {
-			if !e.IsDir() {
+			if !fs.IsDir(filepath.Join(typeDir, e.Name())) {
 				continue
 			}
 			if g, _, ok := describe(typeDir, e.Name()); ok {

@@ -249,3 +249,17 @@ func TestVersions(t *testing.T) {
 		}
 	})
 }
+
+func TestSymlinkedPackageDirectory(t *testing.T) {
+	t.Run("given a package directory symlinked from another disk then it is served", func(t *testing.T) {
+		other := t.TempDir()
+		publish(t, other, "games", "Doom", "1.0.0", []byte("a"), false)
+		root := t.TempDir()
+		os.MkdirAll(filepath.Join(root, "games"), 0755)
+		os.Symlink(filepath.Join(other, "games", "Doom"), filepath.Join(root, "games", "Doom"))
+		s, _ := open(t, root)
+		if _, err := s.Resolve("Doom", LatestTag); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
