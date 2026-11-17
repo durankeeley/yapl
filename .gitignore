@@ -3,3 +3,5 @@ wine-builder-v2/ccache/*
 wine-builder-v2/output/*
 wine-builder/ccache/*
 wine-builder/output/*
+
+.console-browser/
